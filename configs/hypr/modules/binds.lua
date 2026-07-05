@@ -1,11 +1,10 @@
 local mod = "SUPER"
 
 hl.bind(mod .. " + Q",         hl.dsp.window.close())
-hl.bind("CTRL + SHIFT + W",    hl.dsp.window.close())
 hl.bind(mod .. " + T",         hl.dsp.exec_cmd("ghostty"))
-hl.bind(mod .. " + F",         hl.dsp.window.fullscreen())
+hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen())
 hl.bind(mod .. " + E",         hl.dsp.exec_cmd("dolphin"))
-hl.bind(mod .. " + W",         hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mod .. " + F",         hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mod .. " + M",         hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/minimize-toggle.sh"))
 hl.bind(mod .. " + SHIFT + M", hl.dsp.workspace.toggle_special("minimized"))
 
