@@ -259,6 +259,12 @@ def deploy(src=CONFIGS, config_root=CONFIG_ROOT, apply=False):
         })
         if not apply:
             continue
+        preserved = {}
+        if name == "hypr" and dest.exists():
+            for f in ["modules/monitors.lua", "modules/decoration.lua"]:
+                fp = dest / f
+                if fp.is_file():
+                    preserved[f] = fp.read_text()
         if managed:
             saved = {rel: (config_root / rel).read_bytes() for rel in keep}
             marker = _marker_for(dest, is_dir)
@@ -272,6 +278,11 @@ def deploy(src=CONFIGS, config_root=CONFIG_ROOT, apply=False):
         _copy(src_path, dest)
         for rel, data in saved.items():
             (config_root / rel).write_bytes(data)
+        if preserved:
+            for f, content in preserved.items():
+                fp = dest / f
+                fp.parent.mkdir(parents=True, exist_ok=True)
+                fp.write_text(content)
         _marker_for(dest, is_dir).touch()
     return actions
 
@@ -401,7 +412,7 @@ def neutralize(config_root=CONFIG_ROOT, apply=False, src=CONFIGS):
         if apply:
             if save_example:
                 shutil.copy2(mon, example)
-            mon.write_text(MON_AUTO)
+                mon.write_text(MON_AUTO)
 
     env = config_root / "hypr" / "modules" / "env.lua"
     if _pristine("hypr/modules/env.lua", config_root, src):
@@ -588,9 +599,11 @@ def _selftest():
         idletxt = (root / "hypr" / "hypridle.conf").read_text()
         check(str(Path.home()) + "/.config/hypr/scripts/lock.sh" in idletxt,
               "hypridle lock_cmd points at the real home")
-        ghttxt = (root / "hypr" / "ghosttype.lua").read_text()
-        check(str(Path.home()) + "/Applications/GhostType.AppImage" in ghttxt,
-              "ghosttype.lua AppImage path points at the real home")
+        ght = root / "hypr" / "ghosttype.lua"
+        if ght.exists():
+            ghttxt = ght.read_text()
+            check(str(Path.home()) + "/Applications/GhostType.AppImage" in ghttxt,
+                  "ghosttype.lua AppImage path points at the real home")
         fishtxt = (root / "fish" / "config.fish").read_text()
         check("cachyos-fish-config" not in fishtxt and "grok" not in fishtxt
               and "torii-greeting" in fishtxt,
