@@ -399,12 +399,28 @@ def notify_apps(light):
          "/KDEPlatformTheme", "org.kde.KDEPlatformTheme.refreshAll"],
         capture_output=True)
 
-    # GTK3/4 apps honour this gsettings key for live light/dark switching
+    # GTK3/4 apps: switch theme and color-scheme preference in-process
+    gtk_theme = "Breeze" if light else "Breeze-Dark"
     scheme = "prefer-light" if light else "prefer-dark"
-    subprocess.run(
-        ["gsettings", "set", "org.gnome.desktop.interface",
-         "color-scheme", scheme],
-        capture_output=True)
+    for key, val in [
+        ("gtk-theme", gtk_theme),
+        ("color-scheme", scheme),
+    ]:
+        subprocess.run(
+            ["gsettings", "set", "org.gnome.desktop.interface", key, val],
+            capture_output=True)
+
+    # Also write gtk settings.ini files so the theme persists across restarts
+    gtk_prefer_dark = "0" if light else "1"
+    for ver in ("gtk-3.0", "gtk-4.0"):
+        ini = Path.home() / ".config" / ver / "settings.ini"
+        if ini.is_file():
+            text = ini.read_text()
+            text = re.sub(r"(?m)^gtk-theme-name=.*$",
+                          f"gtk-theme-name={gtk_theme}", text)
+            text = re.sub(r"(?m)^gtk-application-prefer-dark-theme=.*$",
+                          f"gtk-application-prefer-dark-theme={gtk_prefer_dark}", text)
+            ini.write_text(text)
 
 
 
