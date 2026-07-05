@@ -1,6 +1,6 @@
 local mod = "SUPER"
 
-hl.bind(mod .. " + Q",         hl.dsp.window.kill())
+hl.bind(mod .. " + Q",         hl.dsp.window.close())
 hl.bind("CTRL + SHIFT + W",    hl.dsp.window.close())
 hl.bind(mod .. " + T",         hl.dsp.exec_cmd("ghostty"))
 hl.bind(mod .. " + F",         hl.dsp.window.fullscreen())
