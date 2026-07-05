@@ -78,6 +78,117 @@ def lerp(x, x0, x1, y0, y1):
     return y0 + t * (y1 - y0)
 
 
+def hex_to_kde(h):
+    """#rrggbb → r,g,b"""
+    return "%d,%d,%d" % (int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16))
+
+
+def _colorscheme_effects_block():
+    """The two static [ColorEffects:*] sections, identical across every wallpaper."""
+    return [
+        "[ColorEffects:Disabled]",
+        "Color=%d,%d,%d" % (56, 56, 56),
+        "ColorAmount=0",
+        "ColorEffect=0",
+        "ContrastAmount=0.65",
+        "ContrastEffect=1",
+        "IntensityAmount=0.1",
+        "IntensityEffect=2",
+        "",
+        "[ColorEffects:Inactive]",
+        "ChangeSelectionColor=true",
+        "Color=%d,%d,%d" % (112, 111, 110),
+        "ColorAmount=0.025",
+        "ColorEffect=2",
+        "ContrastAmount=0.1",
+        "ContrastEffect=2",
+        "Enable=false",
+        "IntensityAmount=0",
+        "IntensityEffect=0",
+        "",
+    ]
+
+
+def _colorscheme_sections(pill):
+    """
+    Build the 7 [Colors:*] sections. They share almost every key (accent,
+    negative/positive/neutral, normal foreground/background) and differ only
+    in which surface tier backs them and, for Selection, which text sits on
+    top of the accent instead of the surface. `common` holds the shared keys;
+    each section only states its overrides.
+    """
+    p = pill
+    bg_win = hex_to_kde(p["surface_container_highest"])
+    bg_view = hex_to_kde(p["surface_container"])
+    bg_btn = hex_to_kde(p["surface_container_high"])
+    bg_sel = hex_to_kde(p["primary"])
+    fg = hex_to_kde(p["bright"])
+    fg_dim = hex_to_kde(p["subtle"])
+    fg_sel = hex_to_kde(p["cream"])
+    accent = hex_to_kde(p["primary"])
+    white = hex_to_kde("#ffffff")
+    neg = hex_to_kde("#da4453")
+    neut = hex_to_kde(p["dim"])
+
+    common = {
+        "DecorationFocus": accent,
+        "DecorationHover": accent,
+        "ForegroundActive": accent,
+        "ForegroundInactive": fg_dim,
+        "ForegroundLink": accent,
+        "ForegroundNegative": neg,
+        "ForegroundNeutral": neut,
+        "ForegroundNormal": fg,
+        "ForegroundPositive": "39,174,96",
+        "ForegroundVisited": fg_dim,
+    }
+
+    return {
+        "Colors:Button": {**common, "BackgroundAlternate": bg_win, "BackgroundNormal": bg_btn},
+        "Colors:Complementary": {**common, "BackgroundAlternate": bg_view,
+                                  "BackgroundNormal": hex_to_kde(p["surface"]),
+                                  "ForegroundVisited": accent},
+        "Colors:Header": {**common, "BackgroundAlternate": bg_view, "BackgroundNormal": bg_btn,
+                           "ForegroundVisited": accent},
+        "Colors:Selection": {**common, "BackgroundAlternate": accent, "BackgroundNormal": bg_sel,
+                              "DecorationFocus": white, "DecorationHover": white,
+                              "ForegroundActive": fg_sel, "ForegroundLink": fg_sel,
+                              "ForegroundNormal": fg_sel, "ForegroundVisited": fg_sel},
+        "Colors:Tooltip": {**common, "BackgroundAlternate": bg_view,
+                            "BackgroundNormal": hex_to_kde(p["surface_container_low"])},
+        "Colors:View": {**common, "BackgroundAlternate": hex_to_kde(p["surface_container_low"]),
+                         "BackgroundNormal": bg_view},
+        "Colors:Window": {**common, "BackgroundAlternate": hex_to_kde(p["surface_container_high"]),
+                           "BackgroundNormal": bg_win},
+    }
+
+
+def render_colorscheme(pill, light):
+    out = _colorscheme_effects_block()
+
+    for section_name, colors in _colorscheme_sections(pill).items():
+        out.append("[%s]" % section_name)
+        for key, val in colors.items():
+            out.append("%s=%s" % (key, val))
+        out.append("")
+
+    out.append("[General]")
+    out.append("ColorScheme=Ricelin-Dynamic")
+    out.append("Name=Ricelin-Dynamic")
+    out.append("shadeSortColumn=true")
+    out.append("")
+    out.append("[KDE]")
+    out.append("contrast=4")
+    out.append("")
+    out.append("[WM]")
+    out.append("activeBackground=" + hex_to_kde(pill["surface_container_high"]))
+    out.append("activeForeground=" + hex_to_kde(pill["bright"]))
+    out.append("inactiveBackground=" + hex_to_kde(pill["surface_container"]))
+    out.append("inactiveForeground=" + hex_to_kde(pill["dim"]))
+
+    return "\n".join(out) + "\n"
+
+
 def render_fastfetch(pill):
     """
     Recolour the fastfetch readout from the same pill palette. fastfetch has no
@@ -109,26 +220,38 @@ def render_fastfetch(pill):
     (ff / "config.jsonc").write_text(out)
 
 
-def main():
-    if len(sys.argv) < 2:
-        return 1
-    if sys.argv[1] == "--hue":
-        hue = (float(sys.argv[2]) % 360) / 360.0
-        mode = sys.argv[3] if len(sys.argv) > 3 else "dark"
-        sat = float(sys.argv[4]) if len(sys.argv) > 4 else 0.5
-        sat = max(0.0, min(1.0, sat))
+def resolve_source(argv):
+    """
+    Turn CLI args into (hue, sat, mean_l, chromatic), or None if there's
+    nothing to do. Two entry points: `--hue <deg> [light|dark] [sat]` for
+    manual/testing use, or a wallpaper path for the real histogram analysis.
+    """
+    if len(argv) < 2:
+        return None
+    if argv[1] == "--hue":
+        hue = (float(argv[2]) % 360) / 360.0
+        mode = argv[3] if len(argv) > 3 else "dark"
+        sat = max(0.0, min(1.0, float(argv[4]) if len(argv) > 4 else 0.5))
         mean_l = 0.85 if mode == "light" else 0.12
-        chromatic = sat > 0.02
-    else:
-        wallpaper = sys.argv[1]
-        if not Path(wallpaper).is_file():
-            return 0
-        hue, sat, mean_l = analyze(wallpaper)
-        chromatic = hue is not None
-        if not chromatic:
-            hue, sat = 0.09, 0.0
-    CACHE.mkdir(parents=True, exist_ok=True)
+        return hue, sat, mean_l, sat > 0.02
 
+    wallpaper = argv[1]
+    if not Path(wallpaper).is_file():
+        return None
+    hue, sat, mean_l = analyze(wallpaper)
+    chromatic = hue is not None
+    if not chromatic:
+        hue, sat = 0.09, 0.0
+    return hue, sat, mean_l, chromatic
+
+
+def build_pill(hue, sat, mean_l, chromatic):
+    """
+    Turn (hue, sat, mean_l) into the 15-colour pill dict plus the `light`
+    flag consumers need alongside it. All the tone math lives here: how
+    saturated the surfaces get, how far the accent lifts off them, and
+    which lightness ramp (light vs dark) frames the whole thing.
+    """
     light = mean_l >= 0.40
     surf_sat = min(sat, 0.26) if light else min(max(sat, 0.30 if chromatic else 0.0), 0.45)
     acc_sat = (min(sat + 0.18, 0.85) if light else min(max(sat, 0.30) + 0.12, 0.82)) if chromatic else 0.05
@@ -146,14 +269,141 @@ def main():
     pill["outline"] = tint(hue, surf_sat, base + (-0.35 if light else 0.35))
     for key, (lit, st) in zip(TEXT_KEYS, text):
         pill[key] = tint(hue, st, lit)
+    return pill, light
+
+
+def write_pill_and_kde(pill, light):
+    """colors.json, fastfetch, the Ricelin-Dynamic KDE scheme + its symlink."""
     (CACHE / "colors.json").write_text(json.dumps(pill, indent=2) + "\n")
     render_fastfetch(pill)
+    colors_text = render_colorscheme(pill, light)
+    (CACHE / "Ricelin-Dynamic.colors").write_text(colors_text)
 
+    schemes = Path.home() / ".local" / "share" / "color-schemes"
+    schemes.mkdir(parents=True, exist_ok=True)
+    link = schemes / "Ricelin-Dynamic.colors"
+    if link.exists() or link.is_symlink():
+        link.unlink()
+    link.symlink_to(CACHE / "Ricelin-Dynamic.colors")
+    write_kdeglobals(colors_text)
+    write_qt6ct_colors(pill)
+
+
+def write_qt6ct_colors(p):
+    """Write colors in qt6ct palette config format so Qt6ct style engine applies them."""
+    def hex_to_rgb(h):
+        return tuple(int(h[i:i+2], 16) for i in (1, 3, 5))
+    def rgb_to_hex_qt(r, g, b, a=255):
+        return '#%02x%02x%02x%02x' % (a, r, g, b)
+    def get_color_list(roles_map):
+        res = []
+        for role_hex in roles_map:
+            color = p.get(role_hex, role_hex)
+            r, g, b = hex_to_rgb(color)
+            res.append(rgb_to_hex_qt(r, g, b))
+        return ', '.join(res)
+
+    roles = [
+        'bright',                   # 0: WindowText
+        'surface_container_high',    # 1: Button
+        'bright',                    # 2: Light (frequently text/borders in light mode, keep bright)
+        'surface_container_highest', # 3: Midlight
+        'surface_container_low',     # 4: Dark
+        'outline',                  # 5: Mid
+        'bright',                   # 6: Text
+        'cream',                    # 7: BrightText
+        'bright',                   # 8: ButtonText
+        'surface',                  # 9: Base (Main window/list background, MUST be dark surface)
+        'surface_container',        # 10: Window (Main panel backgrounds, MUST be dark surface_container)
+        '#000000',                  # 11: Shadow
+        'primary',                  # 12: Highlight
+        'cream',                    # 13: HighlightedText
+        'primary',                  # 14: Link
+        'dim',                      # 15: LinkVisited
+        'surface_container_low',    # 16: AlternateBase (Alternating rows, MUST be dark surface_container_low)
+        'surface',                  # 17: NoRole
+        'surface_container_low',    # 18: ToolTipBase
+        'bright',                   # 19: ToolTipText
+        'dim'                       # 20: PlaceholderText
+    ]
+
+    cfg_dir = Path.home() / ".config" / "qt6ct" / "colors"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = cfg_dir / "Ricelin-Dynamic.conf"
+    
+    colors_list = get_color_list(roles)
+    content = (
+        "[ColorScheme]\n"
+        f"active_colors={colors_list}\n"
+        f"disabled_colors={colors_list}\n"
+        f"inactive_colors={colors_list}\n"
+    )
+    cfg_path.write_text(content)
+
+
+def write_kvantum(light):
+    kvantum_theme = "WhiteSur" if light else "WhiteSurDark"
+    kvantum_cfg = Path.home() / ".config" / "Kvantum" / "kvantum.kvconfig"
+    kvantum_cfg.parent.mkdir(parents=True, exist_ok=True)
+    kvantum_cfg.write_text("[General]\ntheme=%s\n" % kvantum_theme)
+
+
+def write_kdeglobals(colors_text):
+    """Sync the [Colors:*] sections and widgetStyle into ~/.config/kdeglobals."""
+    import configparser
+    kg = configparser.ConfigParser(interpolation=None)
+    kgpath = Path.home() / ".config" / "kdeglobals"
+    try:
+        kg.read_string(kgpath.read_text())
+    except (FileNotFoundError, configparser.Error):
+        return
+
+    cols = configparser.ConfigParser(interpolation=None)
+    cols.read_string(colors_text)
+
+    for sec in cols.sections():
+        if sec.startswith("ColorEffects:") or sec.startswith("Colors:"):
+            kg[sec] = cols[sec]
+
+    if kg.has_section("General"):
+        # Remove lowercase duplicates to avoid conflict with case-sensitive readers
+        kg["General"].pop("widgetstyle", None)
+        kg["General"].pop("colorscheme", None)
+        kg["General"]["widgetStyle"] = "Breeze"
+        kg["General"]["ColorScheme"] = "Ricelin-Dynamic"
+
+    # Preserving exact cases for General section and section titles
+    lines = []
+    for s in kg.sections():
+        lines.append("[%s]" % s)
+        for k, v in kg[s].items():
+            # If writing back keys in General, keep their PascalCase representation
+            if s == "General":
+                if k.lower() == "widgetstyle":
+                    lines.append("widgetStyle=%s" % v)
+                    continue
+                if k.lower() == "colorscheme":
+                    lines.append("ColorScheme=%s" % v)
+                    continue
+            lines.append("%s=%s" % (k, v))
+        lines.append("")
+
+    kgpath.write_text("\n".join(lines) + "\n")
+
+
+def write_matugen_terminal_colors(pill, hue, sat, chromatic):
+    """
+    hypr-colors.lua and ghostty-colors both read matugen's dark base16, keyed
+    off the same source colour as the pill's accent. If matugen fails (not
+    installed, bad output, ...) the pill/KDE/Kvantum outputs above still
+    landed, so we just skip these two rather than aborting the whole run.
+    """
     try:
         b = {k: v["dark"]["color"] for k, v in
              matugen(tint(hue, sat, 0.45) if chromatic else "#787878")["base16"].items()}
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-        return 0
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        print(f"wallcolors: matugen step skipped ({exc})", file=sys.stderr)
+        return
 
     (CACHE / "hypr-colors.lua").write_text(
         'return {\n    active = "%s",\n    inactive = "%s",\n}\n'
@@ -173,6 +423,20 @@ def main():
     for i, base_key in enumerate(ansi_map):
         lines.append(f'palette = {i}={b[base_key]}')
     (CACHE / "ghostty-colors").write_text("\n".join(lines) + "\n")
+
+
+def main():
+    source = resolve_source(sys.argv)
+    if source is None:
+        return 0 if len(sys.argv) >= 2 else 1
+    hue, sat, mean_l, chromatic = source
+
+    CACHE.mkdir(parents=True, exist_ok=True)
+    pill, light = build_pill(hue, sat, mean_l, chromatic)
+
+    write_pill_and_kde(pill, light)
+    write_kvantum(light)
+    write_matugen_terminal_colors(pill, hue, sat, chromatic)
     return 0
 
 
