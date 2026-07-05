@@ -352,6 +352,7 @@ def write_kdeglobals(colors_text):
     """Sync the [Colors:*] sections and widgetStyle into ~/.config/kdeglobals."""
     import configparser
     kg = configparser.ConfigParser(interpolation=None)
+    kg.optionxform = str
     kgpath = Path.home() / ".config" / "kdeglobals"
     try:
         kg.read_string(kgpath.read_text())
@@ -359,6 +360,7 @@ def write_kdeglobals(colors_text):
         return
 
     cols = configparser.ConfigParser(interpolation=None)
+    cols.optionxform = str
     cols.read_string(colors_text)
 
     for sec in cols.sections():
