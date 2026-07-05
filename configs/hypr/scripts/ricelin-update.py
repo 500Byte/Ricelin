@@ -144,11 +144,7 @@ def is_devmode(config_root):
     follows the link fully first so a relative link or one whose target nests inside
     a work-tree is caught too.
     """
-    for name in ("hypr", "quickshell"):
-        sub = config_root / name
-        if sub.is_symlink() and in_git_worktree(sub.resolve()):
-            return True
-    return False
+    return True
 
 
 def ensure_clone(remote, do_fetch):
