@@ -1,84 +1,168 @@
-# Flujo de Trabajo para Personalización y Desarrollo en Ricelin
+# Flujo de Trabajo para Personalización de Ricelin
 
-Este documento describe la metodología correcta para personalizar, optimizar y mantener tus modificaciones sobre el rice **Ricelin** de forma segura y sin riesgo de perder cambios al actualizar desde upstream.
-
----
-
-## 🛠 Estructura del Entorno
-
-1. **Directorio del Repositorio Git** (Donde se edita el código):
-   `/home/diego/Documents/GitHub/Ricelin`
-   
-2. **Directorio de Configuración Activa** (Donde el sistema lee los archivos):
-   `/home/diego/.config` (gestionado por la propiedad `.ricelin-managed` en cada subcarpeta)
-
-> ⚠️ **IMPORTANTE:** Nunca edites directamente los archivos en `~/.config/quickshell` o `~/.config/hypr`. El instalador de Ricelin sobreescribe estos directorios limpiamente. Modifica siempre los archivos dentro de la carpeta del repositorio Git y luego despliégalos.
+Guía de referencia para cualquier agente o desarrollador que trabaje sobre
+este rice. Explica dónde editar, cómo desplegar y cómo mantener las
+personalizaciones a salvo de actualizaciones upstream.
 
 ---
 
-## 🔄 Flujo de Trabajo Diario
+## Regla fundamental
 
-### 1. Realizar Modificaciones en el Repositorio
-Todos los cambios de ricing, configuración de teclado, y optimización de rendimiento deben realizarse bajo:
-* **Hyprland:** `/home/diego/Documents/GitHub/Ricelin/configs/hypr/`
-* **Quickshell (Barra/Widgets):** `/home/diego/Documents/GitHub/Ricelin/configs/quickshell/`
+> **Nunca editar archivos directamente en `~/.config/`.**
+> El instalador sobreescribe esos directorios en cada deploy.
+> Todo cambio va primero al repositorio Git y luego se despliega.
 
-### 2. Desplegar los Cambios a `~/.config`
-Para aplicar las modificaciones locales en tu entorno activo de forma segura, ejecuta la capa de despliegue y neutralización de Ricelin:
+---
+
+## Estructura del entorno
+
+| Propósito | Ruta |
+|-----------|------|
+| Código fuente (editar aquí) | `/home/diego/Documents/GitHub/Ricelin/` |
+| Config activa (solo lectura para el agente) | `/home/diego/.config/hypr/` y `/home/diego/.config/quickshell/` |
+| Instalador | `/home/diego/Documents/GitHub/Ricelin/installer/deploy.py` |
+
+### Archivos de configuración por componente
+
+- **Hyprland:** `configs/hypr/`
+- **Quickshell (barra/widgets):** `configs/quickshell/`
+- **Scripts de sistema:** `configs/hypr/scripts/`
+
+### Archivos gestionados por la UI (no tocar desde el repo)
+
+Estos dos archivos los escribe la propia UI de Settings en tiempo de ejecución.
+El deploy los preserva automáticamente — no hace falta incluirlos en commits:
+
+- `configs/hypr/modules/monitors.lua` — configuración de monitor (resolución, Hz, posición)
+- `configs/hypr/modules/decoration.lua` — bordes, blur, opacidad
+
+---
+
+## Rama Git activa
+
+Las personalizaciones viven en la rama `personal-custom`, separada de `main` (upstream).
 
 ```bash
-python -c "import sys; sys.path.append('/home/diego/Documents/GitHub/Ricelin/installer'); import deploy; deploy.deploy(apply=True); deploy.neutralize(apply=True)"
+# Verificar rama activa antes de editar
+git -C /home/diego/Documents/GitHub/Ricelin branch
+# Debe mostrar * personal-custom
 ```
 
-### 3. Recargar el Entorno
-Una vez desplegado, recarga los compositores/servicios para ver los cambios aplicados en pantalla:
-
-* **Recargar Hyprland:**
-  ```bash
-  hyprctl reload
-  ```
-* **Recargar Quickshell (Pill & Lock):**
-  ```bash
-  ricelin restart all
-  ```
-
 ---
 
-## 🌿 Gestión de Ramas en Git y Upstream
+## Flujo de trabajo diario
 
-Para mantener tus personalizaciones a salvo de actualizaciones del autor original (`Gakuseei`):
+### 1. Editar en el repositorio
 
-1. **Mantén tus cambios en una rama dedicada:**
-   Actualmente, tus cambios están guardados en la rama local `personal-custom`.
-
-2. **Para actualizar desde upstream (Gakuseei/Ricelin):**
-   ```bash
-   # 1. Ve a la rama main limpia
-   git checkout main
-   
-   # 2. Descarga las últimas actualizaciones
-   git pull origin main
-   
-   # 3. Regresa a tu rama personalizada
-   git checkout personal-custom
-   
-   # 4. Aplica tus cambios encima de la nueva base de upstream
-   git rebase main
-   ```
-   *Si ocurre algún conflicto menor durante el rebase (por ejemplo, si el autor cambia las mismas líneas que optimizaste), resuélvelos y ejecuta `git rebase --continue`.*
-
----
-
-## 🔍 Comprobación de Errores y Diagnóstico
-
-### QML (Quickshell)
-Para comprobar errores estáticos en la interfaz sin tener que lanzarla, puedes usar `qmllint` localmente:
 ```bash
-find /home/diego/.config/quickshell/pill/ -name "*.qml" -exec /usr/lib/qt6/bin/qmllint {} +
+# Ejemplo: editar un script de Hyprland
+nano /home/diego/Documents/GitHub/Ricelin/configs/hypr/scripts/wallpaper.sh
+
+# Ejemplo: editar un widget de Quickshell
+nano /home/diego/Documents/GitHub/Ricelin/configs/quickshell/pill/Wallpaper.qml
 ```
 
-### Hyprland
-Para verificar que la sintaxis de Lua y las configuraciones de Hyprland sean correctas:
+### 2. Verificar antes de desplegar
+
 ```bash
+# Self-test del instalador (detecta errores en la lógica de deploy)
+python /home/diego/Documents/GitHub/Ricelin/installer/deploy.py
+
+# Verificar sintaxis de Hyprland (no lanza el compositor, solo valida)
 hyprland --verify-config
+
+# Verificar QML estáticamente
+find /home/diego/Documents/GitHub/Ricelin/configs/quickshell/pill/ \
+  -name "*.qml" -exec /usr/lib/qt6/bin/qmllint {} +
 ```
+
+### 3. Desplegar al entorno activo
+
+```bash
+# Solo deploy — para uso diario y redespliegues personales
+python -c "
+import sys
+sys.path.append('/home/diego/Documents/GitHub/Ricelin/installer')
+import deploy
+deploy.deploy(apply=True)
+"
+```
+
+> ⚠️ No llamar `deploy.neutralize(apply=True)` en redespliegues personales.
+> `neutralize` es para preparar el rice para distribución pública (resetea rutas,
+> monitors, etc.) y solo debe usarse en primera instalación o al publicar upstream.
+
+### 4. Recargar el entorno
+
+Después de desplegar, aplicar los cambios en vivo:
+
+```bash
+# Solo cambios de Quickshell (barra, widgets, UI)
+/home/diego/.config/hypr/scripts/ricelin restart pill
+
+# Cambios de Hyprland (keybinds, reglas de ventana, decoración)
+hyprctl reload
+
+# Ambos a la vez (cuando hay cambios en los dos)
+/home/diego/.config/hypr/scripts/ricelin restart all
+```
+
+> `ricelin` no está en `$PATH` — usar siempre la ruta absoluta:
+> `/home/diego/.config/hypr/scripts/ricelin`
+
+### 5. Hacer commit
+
+```bash
+cd /home/diego/Documents/GitHub/Ricelin
+git add <archivos-modificados>
+git commit -m "tipo(scope): descripción breve"
+```
+
+---
+
+## Actualizar desde upstream (Gakuseei/Ricelin)
+
+```bash
+cd /home/diego/Documents/GitHub/Ricelin
+
+# 1. Ir a main y bajar cambios
+git checkout main
+git pull origin main
+
+# 2. Volver a la rama personal y aplicar encima del upstream nuevo
+git checkout personal-custom
+git rebase main
+```
+
+Si hay conflictos durante el rebase, resolverlos manualmente y continuar:
+
+```bash
+git add <archivo-resuelto>
+git rebase --continue
+```
+
+---
+
+## Diagnóstico rápido
+
+| Síntoma | Comando |
+|---------|---------|
+| La barra no se ve o crashea | `journalctl --user -u quickshell -n 50` |
+| Hyprland ignora un keybind | `hyprland --verify-config` |
+| Un script no encuentra su binario | Verificar que use ruta absoluta (no `$PATH`) |
+| Cambios desplegados pero no visibles | Recargar con `ricelin restart pill` o `hyprctl reload` |
+| Wallpapers no aparecen en el picker | Directorio correcto: `~/Pictures/Wallpapers/` |
+
+---
+
+## Notas importantes para agentes
+
+- **`$PATH` en Hyprland** es restringido — binarios en `~/.local/bin/` no son
+  accesibles desde scripts lanzados por Hyprland. Usar siempre rutas absolutas
+  (ej. `/home/diego/.local/bin/rishot`, no `rishot`).
+- **Quickshell tiene dos instancias:** `pill` (barra/UI) y `lock` (pantalla de bloqueo).
+  Reiniciar solo la instancia afectada para evitar parpadeos innecesarios.
+- **`flags.json`** en `~/.local/state/ricelin/flags.json` persiste el estado de la UI
+  entre reinicios y está fuera del deploy — no se sobreescribe nunca.
+- **Crash de Quickshell al reiniciar** con `Signal: Aborted (6)` en `QWindow::unsetCursor()`
+  es inofensivo — bug de Qt6/Wayland en el ciclo de salida, no indica un problema real.
