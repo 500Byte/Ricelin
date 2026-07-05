@@ -348,7 +348,7 @@ PillSurface {
                     height: 22 * root.s
                     radius: 5 * root.s
                     color: Qt.rgba(1, 1, 1, 0.05)
-                    visible: !(icon.status === Image.Ready && icon.source != "")
+                    visible: !(icon.status === Image.Ready && icon.source !== "")
                 }
                 Image {
                     id: icon
@@ -358,7 +358,7 @@ PillSurface {
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                     smooth: true
-                    visible: status === Image.Ready && source != ""
+                    visible: status === Image.Ready && source !== ""
                     source: {
                         if (!appRow.entry || !appRow.entry.icon)
                             return "";

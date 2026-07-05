@@ -176,7 +176,7 @@ PillSurface {
 
                     Text {
                         anchors.centerIn: parent
-                        visible: !(icon.status === Image.Ready && icon.source != "")
+                        visible: !(icon.status === Image.Ready && icon.source !== "")
                         text: erow.title.length > 0 ? erow.title.charAt(0).toUpperCase() : "?"
                         color: Theme.dim
                         font.family: Theme.font
@@ -193,7 +193,7 @@ PillSurface {
                         fillMode: Image.PreserveAspectFit
                         asynchronous: true
                         smooth: true
-                        visible: status === Image.Ready && source != ""
+                        visible: status === Image.Ready && source !== ""
                         source: erow.resolved && erow.resolved.icon ? Quickshell.iconPath(erow.resolved.icon, true) : ""
                     }
                 }
@@ -265,6 +265,88 @@ PillSurface {
             width: parent.width
             s: root.s
             onPicked: (entry) => root.addClass(entry.startupClass || entry.id)
+        }
+
+        Item { width: 1; height: visible ? 6 * root.s : 0; visible: root.addOpen }
+
+        ListView {
+            id: addList
+            width: parent.width
+            height: visible ? Math.min(contentHeight, 226 * root.s) : 0
+            visible: root.addOpen
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            spacing: 4 * root.s
+            model: root.results.length
+
+            delegate: Item {
+                id: appRow
+                required property int index
+                width: addList.width
+                height: 40 * root.s
+
+                readonly property var entry: root.results[index]
+                readonly property bool selected: index === root.selectedIndex
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 9 * root.s
+                    visible: appRow.selected || appArea.containsMouse
+                    color: appRow.selected ? Theme.frameBg : Qt.rgba(0.94, 0.88, 0.84, 0.03)
+                    border.width: appRow.selected ? 1 : 0
+                    border.color: Theme.frameBorder
+                }
+
+                MouseArea {
+                    id: appArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onPositionChanged: root.selectedIndex = appRow.index
+                    onClicked: {
+                        root.selectedIndex = appRow.index;
+                        root.pick();
+                    }
+                }
+
+                Rectangle {
+                    id: appTileBg
+                    anchors.left: parent.left
+                    anchors.leftMargin: 11 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 24 * root.s
+                    height: 24 * root.s
+                    radius: 6 * root.s
+                    color: Qt.rgba(1, 1, 1, 0.05)
+                    visible: !(appIcon.status === Image.Ready && appIcon.source !== "")
+                }
+                Image {
+                    id: appIcon
+                    anchors.fill: appTileBg
+                    sourceSize.width: Math.round(40 * root.s)
+                    sourceSize.height: Math.round(40 * root.s)
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    smooth: true
+                    visible: status === Image.Ready && source !== ""
+                    source: appRow.entry && appRow.entry.icon ? Quickshell.iconPath(appRow.entry.icon, true) : ""
+                }
+
+                Text {
+                    anchors.left: appTileBg.right
+                    anchors.leftMargin: 11 * root.s
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: appRow.entry ? appRow.entry.name : ""
+                    color: Theme.cream
+                    font.family: Theme.font
+                    font.pixelSize: 12.5 * root.s
+                    font.weight: appRow.selected ? Font.DemiBold : Font.Normal
+                    elide: Text.ElideRight
+                }
+            }
+>>>>>>> e65bb31 (feat: configure keyboard layout to Spanish and optimize QML bindings)
         }
 
         Item { width: 1; height: 4 * root.s }

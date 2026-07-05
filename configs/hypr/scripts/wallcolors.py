@@ -166,8 +166,12 @@ def main():
         f'selection-background = {b["base02"]}',
         f'selection-foreground = {b["base07"]}',
     ]
-    for i in range(16):
-        lines.append(f'palette = {i}={b["base%02x" % i]}')
+    ansi_map = [
+        "base00", "base08", "base0b", "base0a", "base0d", "base0e", "base0c", "base05",
+        "base03", "base08", "base0b", "base0a", "base0d", "base0e", "base0c", "base07"
+    ]
+    for i, base_key in enumerate(ansi_map):
+        lines.append(f'palette = {i}={b[base_key]}')
     (CACHE / "ghostty-colors").write_text("\n".join(lines) + "\n")
     return 0
 
