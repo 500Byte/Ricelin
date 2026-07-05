@@ -341,12 +341,6 @@ def write_qt6ct_colors(p):
     cfg_path.write_text(content)
 
 
-def write_kvantum(light):
-    kvantum_theme = "WhiteSur" if light else "WhiteSurDark"
-    kvantum_cfg = Path.home() / ".config" / "Kvantum" / "kvantum.kvconfig"
-    kvantum_cfg.parent.mkdir(parents=True, exist_ok=True)
-    kvantum_cfg.write_text("[General]\ntheme=%s\n" % kvantum_theme)
-
 
 def write_kdeglobals(colors_text):
     """Sync the [Colors:*] sections and widgetStyle into ~/.config/kdeglobals."""
@@ -393,11 +387,31 @@ def write_kdeglobals(colors_text):
     kgpath.write_text("\n".join(lines) + "\n")
 
 
-def write_matugen_terminal_colors(pill, hue, sat, chromatic):
+def notify_apps(light):
+    """
+    Notify running Qt/KDE and GTK apps of the colour-scheme change without
+    requiring a restart. Failures are silently ignored — both calls are
+    best-effort; the files written above are always the source of truth.
+    """
+    # Qt/KDE apps reload their palette in-process via this D-Bus signal
+    subprocess.run(
+        ["dbus-send", "--session", "--type=signal",
+         "/KDEPlatformTheme", "org.kde.KDEPlatformTheme.refreshAll"],
+        capture_output=True)
+
+    # GTK3/4 apps honour this gsettings key for live light/dark switching
+    scheme = "prefer-light" if light else "prefer-dark"
+    subprocess.run(
+        ["gsettings", "set", "org.gnome.desktop.interface",
+         "color-scheme", scheme],
+        capture_output=True)
+
+
+
     """
     hypr-colors.lua and ghostty-colors both read matugen's dark base16, keyed
     off the same source colour as the pill's accent. If matugen fails (not
-    installed, bad output, ...) the pill/KDE/Kvantum outputs above still
+    installed, bad output, ...) the pill/KDE outputs above still
     landed, so we just skip these two rather than aborting the whole run.
     """
     try:
@@ -437,8 +451,8 @@ def main():
     pill, light = build_pill(hue, sat, mean_l, chromatic)
 
     write_pill_and_kde(pill, light)
-    write_kvantum(light)
     write_matugen_terminal_colors(pill, hue, sat, chromatic)
+    notify_apps(light)
     return 0
 
 
