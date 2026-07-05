@@ -3,7 +3,7 @@ set -euo pipefail
 
 flags_file="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin/flags.json"
 WPDIR=$(jq -r '.wallpaperDir // ""' "$flags_file" 2>/dev/null || echo "")
-[ -n "$WPDIR" ] || WPDIR="$HOME/Ricelin/wallpapers"
+[ -n "$WPDIR" ] || WPDIR="$HOME/Pictures/Wallpapers"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper"
 BAG="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper-bag"
 

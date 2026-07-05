@@ -38,7 +38,7 @@ download() {
 
     flags="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin/flags.json"
     wpdir=$(jq -r '.wallpaperDir // ""' "$flags" 2>/dev/null || echo "")
-    [ -n "$wpdir" ] || wpdir="$HOME/Ricelin/wallpapers"
+    [ -n "$wpdir" ] || wpdir="$HOME/Pictures/Wallpapers"
     dir="$wpdir/downloads"
     mkdir -p "$dir"
 
