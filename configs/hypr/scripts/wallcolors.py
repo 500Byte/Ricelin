@@ -423,7 +423,7 @@ def notify_apps(light):
             ini.write_text(text)
 
 
-
+def write_matugen_terminal_colors(pill, hue, sat, chromatic):
     """
     hypr-colors.lua and ghostty-colors both read matugen's dark base16, keyed
     off the same source colour as the pill's accent. If matugen fails (not
