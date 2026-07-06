@@ -400,7 +400,7 @@ def notify_apps(light):
         capture_output=True)
 
     # GTK3/4 apps: switch theme and color-scheme preference in-process
-    gtk_theme = "Breeze" if light else "Breeze-Dark"
+    gtk_theme = "Adwaita" if light else "Adwaita-dark"
     scheme = "prefer-light" if light else "prefer-dark"
     for key, val in [
         ("gtk-theme", gtk_theme),

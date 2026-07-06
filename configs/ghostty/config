@@ -41,4 +41,4 @@ palette = 13=#d08a96
 palette = 14=#9fc3b4
 palette = 15=#fff6f0
 
-config-file = ?/home/erik/.cache/ricelin/ghostty-colors
+config-file = ?/home/diego/.cache/ricelin/ghostty-colors
