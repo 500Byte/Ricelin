@@ -37,4 +37,31 @@ fi
 rand_idx=$((RANDOM % ${#greetings[@]}))
 greeting="${greetings[$rand_idx]}"
 
-echo "$greeting"
+# Uptime parsing
+upt=$(uptime -p | sed 's/^up //')
+
+# Weather caching (async)
+cache_file="/home/diego/.cache/terminal_weather"
+mkdir -p "$(dirname "$cache_file")"
+
+current_time=$(date +%s)
+last_modified=0
+if [ -f "$cache_file" ]; then
+    last_modified=$(date -r "$cache_file" +%s 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+fi
+
+if [ $((current_time - last_modified)) -gt 1800 ] || [ ! -s "$cache_file" ]; then
+    nohup bash -c '
+        weather=$(curl -s --connect-timeout 2 "wttr.in/Santa_Marta?format=%c%t" 2>/dev/null)
+        if [ -n "$weather" ] && [[ ! "$weather" =~ "<html>" ]] && [[ ! "$weather" =~ "Error" ]]; then
+            echo "$weather" | sed "s/+//g" | xargs > "'"$cache_file"'"
+        fi
+    ' >/dev/null 2>&1 &
+fi
+
+weather_info="N/A"
+if [ -s "$cache_file" ]; then
+    weather_info=$(cat "$cache_file")
+fi
+
+echo "${greeting} ✨  ·  Santa Marta: ${weather_info}  ·  Uptime: ${upt}"
