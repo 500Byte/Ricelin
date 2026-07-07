@@ -8,29 +8,22 @@ X=$'\e[0m'                  # Reset color
 
 # Current hour
 hour=$(date +%H)
-ggreeting=""
+# Load greeting strings
+STRINGS_FILE="/home/diego/.config/fish/welcome_strings.sh"
+if [ -f "$STRINGS_FILE" ]; then
+    source "$STRINGS_FILE"
+else
+    greetings_morning=("Diseño impecable, código... ya veremos.")
+    greetings_afternoon=("Tu código no compila, pero al menos la interfaz se ve hermosa.")
+    greetings_night=("Hoy el kerning se ve bien. Tú... no tanto.")
+fi
 
 if [ "$hour" -ge 5 ] && [ "$hour" -lt 12 ]; then
-    # Morning greetings
-    greetings=(
-        "Buenos días. ¿Listo para mover un elemento 1px a la izquierda?"
-        "Ese espaciado asimétrico me está dando ansiedad..."
-        "Diseño impecable, código... ya veremos."
-    )
+    greetings=("${greetings_morning[@]}")
 elif [ "$hour" -ge 12 ] && [ "$hour" -lt 18 ]; then
-    # Afternoon greetings
-    greetings=(
-        "Ah, otra vez por aquí. ¿Alineando divs o peleando con tipografías?"
-        "Tu código no compila, pero al menos la interfaz se ve hermosa."
-        "¿Listo para criticar la UI de alguien más hoy?"
-    )
+    greetings=("${greetings_afternoon[@]}")
 else
-    # Night greetings
-    greetings=(
-        "Ve a dormir. Ninguna buena decisión de UX se toma después de medianoche."
-        "Hoy el kerning se ve bien. Tú... no tanto."
-        "¿Alineando pixeles en la oscuridad? Clásico."
-    )
+    greetings=("${greetings_night[@]}")
 fi
 
 # Pick a random greeting from the array
