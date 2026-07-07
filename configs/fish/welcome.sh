@@ -57,18 +57,34 @@ if [ -s "$cache_file" ]; then
     weather_info=$(cat "$cache_file")
 fi
 
+# Get terminal width for responsive layout (fallback to 80 columns)
+cols=$(tput cols 2>/dev/null || echo 80)
+
 # Print greeting line
 # For length calculation we use the string without color codes:
 raw_first_line="${greeting} ✨  ·  Santa Marta: ${weather_info}  ·  Uptime: ${upt}"
 char_count=$(echo -n "$raw_first_line" | wc -m)
 
-# Format first line with colors
-first_line="${T}${greeting}${X} ${G}✨${X}  ${DIM}·${X}  ${DIM}Santa Marta:${X} ${T}${weather_info}${X}  ${DIM}·${X}  ${DIM}Uptime:${X} ${T}${upt}${X}"
+if [ "$cols" -lt "$char_count" ]; then
+    # Split first line into greeting and weather/uptime
+    first_line="${T}${greeting}${X} ${G}✨${X}\n${DIM}Santa Marta:${X} ${T}${weather_info}${X}  ${DIM}·${X}  ${DIM}Uptime:${X} ${T}${upt}${X}"
+    len1=$(echo -n "${greeting} ✨" | wc -m)
+    len2=$(echo -n "Santa Marta: ${weather_info}  ·  Uptime: ${upt}" | wc -m)
+    divider_len=$(( len1 > len2 ? len1 : len2 ))
+else
+    # Keep on a single line
+    first_line="${T}${greeting}${X} ${G}✨${X}  ${DIM}·${X}  ${DIM}Santa Marta:${X} ${T}${weather_info}${X}  ${DIM}·${X}  ${DIM}Uptime:${X} ${T}${upt}${X}"
+    divider_len=$char_count
+fi
+
+# Ensure divider does not exceed terminal width
+[ "$divider_len" -gt "$cols" ] && divider_len=$cols
+
 echo -e "$first_line"
 
 # Generate divider
 divider=""
-for ((i=0; i<char_count; i++)); do
+for ((i=0; i<divider_len; i++)); do
     divider="${divider}─"
 done
 echo -e "${DIM}${divider}${X}"
@@ -124,6 +140,25 @@ dpct=${dpct// /}
 davail=${davail// /}
 davail=${davail%G}
 
-# Print metrics line using Nerd Fonts icons ( CPU: ..., GPU: ..., RAM: ..., Disco: ... )
+# Format metrics badges with icons
 # cpu icon: , gpu icon: 󰢮, ram icon: , disk icon: 󰋊
-echo -e "${G}${X}  ${DIM}CPU:${X} ${T}${cpu}% (${cpu_temp}°C)${X}    ${G}󰢮${X}  ${DIM}GPU:${X} ${T}${gpu}% (${gpu_temp}°C)${X}    ${G}${X}  ${DIM}RAM:${X} ${T}${rused}/${rtot} GB (${rpct}%)${X}    ${G}󰋊${X}  ${DIM}Disco:${X} ${T}${davail} GB libres (${dpct})${X}"
+cpu_badge="${G}${X}  ${DIM}CPU:${X} ${T}${cpu}% (${cpu_temp}°C)${X}"
+gpu_badge="${G}󰢮${X}  ${DIM}GPU:${X} ${T}${gpu}% (${gpu_temp}°C)${X}"
+ram_badge="${G}${X}  ${DIM}RAM:${X} ${T}${rused}/${rtot} GB (${rpct}%)${X}"
+disk_badge="${G}󰋊${X}  ${DIM}Disco:${X} ${T}${davail} GB libres (${dpct})${X}"
+
+# Output metrics dynamically based on width
+if [ "$cols" -lt 55 ]; then
+    # Very narrow: One badge per line
+    echo -e "$cpu_badge"
+    echo -e "$gpu_badge"
+    echo -e "$ram_badge"
+    echo -e "$disk_badge"
+elif [ "$cols" -lt 95 ]; then
+    # Medium: Two badges per line
+    echo -e "${cpu_badge}    ${gpu_badge}"
+    echo -e "${ram_badge}    ${disk_badge}"
+else
+    # Wide: All badges on a single line
+    echo -e "${cpu_badge}    ${gpu_badge}    ${ram_badge}    ${disk_badge}"
+fi
