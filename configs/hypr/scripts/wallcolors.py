@@ -21,11 +21,11 @@ CACHE = Path.home() / ".cache" / "ricelin"
 
 SURF_NAMES = ["surface", "surface_container_low", "surface_container",
               "surface_container_high", "surface_container_highest", "outline_variant"]
-DARK_STEPS = [0.0, 0.022, 0.038, 0.065, 0.100, 0.225]
+DARK_STEPS = [0.0, 0.025, 0.045, 0.075, 0.120, 0.250]
 LIGHT_STEPS = [0.0, -0.045, -0.075, -0.115, -0.160, -0.340]
 TEXT_KEYS = ["cream", "bright", "subtle", "dim", "faint", "icon_dim", "tick_rest"]
-DARK_TEXT = [(0.90, 0.05), (0.97, 0.03), (0.73, 0.07), (0.54, 0.06),
-             (0.44, 0.05), (0.81, 0.07), (0.75, 0.08)]
+DARK_TEXT = [(0.92, 0.04), (0.98, 0.02), (0.76, 0.06), (0.58, 0.05),
+             (0.46, 0.04), (0.83, 0.06), (0.77, 0.07)]
 LIGHT_TEXT = [(0.20, 0.18), (0.10, 0.20), (0.36, 0.14), (0.48, 0.10),
               (0.56, 0.08), (0.28, 0.12), (0.34, 0.12)]
 
@@ -254,13 +254,13 @@ def build_pill(hue, sat, mean_l, chromatic):
     """
     light = mean_l >= 0.40
     surf_sat = min(sat, 0.26) if light else min(max(sat, 0.30 if chromatic else 0.0), 0.45)
-    acc_sat = (min(sat + 0.18, 0.85) if light else min(max(sat, 0.30) + 0.12, 0.82)) if chromatic else 0.05
+    acc_sat = (min(sat + 0.18, 0.85) if light else min(max(sat, 0.35) + 0.15, 0.88)) if chromatic else 0.05
     if light:
         base = lerp(mean_l, 0.40, 0.66, 0.80, 0.93)
         steps, text, acc_l, deep_l, glow_l = LIGHT_STEPS, LIGHT_TEXT, 0.42, 0.30, 0.55
     else:
-        base = lerp(mean_l, 0.0, 0.40, 0.045, 0.20)
-        steps, text, acc_l, deep_l, glow_l = DARK_STEPS, DARK_TEXT, 0.70, 0.34, 0.86
+        base = lerp(mean_l, 0.0, 0.40, 0.015, 0.12)
+        steps, text, acc_l, deep_l, glow_l = DARK_STEPS, DARK_TEXT, 0.75, 0.34, 0.88
 
     pill = {name: tint(hue, surf_sat, base + step) for name, step in zip(SURF_NAMES, steps)}
     pill["primary"] = tint(hue, acc_sat, acc_l)

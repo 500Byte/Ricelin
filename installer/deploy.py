@@ -82,7 +82,17 @@ hl.env("HYPRCURSOR_SIZE", "24")
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 
 hl.env("QT_QPA_PLATFORMTHEME", "kde")
+
+-- Force GTK4 to use the ngl renderer to prevent blank/black windows on Hyprland
+hl.env("GSK_RENDERER", "ngl")
+
+-- Fix dead keys (tildes/accents) in GTK4/Ghostty on Wayland
+hl.env("GTK_IM_MODULE", "simple")
+
+-- Allow KDE applications like Dolphin to locate application menus on Hyprland
+hl.env("XDG_MENU_PREFIX", "plasma-")
 """
+
 
 # Appended only when an nvidia GPU is on the bus.
 ENV_NVIDIA = """
@@ -606,8 +616,8 @@ def _selftest():
                   "ghosttype.lua AppImage path points at the real home")
         fishtxt = (root / "fish" / "config.fish").read_text()
         check("cachyos-fish-config" not in fishtxt and "grok" not in fishtxt
-              and "torii-greeting" in fishtxt,
-              "fish stripped of cachyos + grok, torii greeting kept")
+              and "welcome" in fishtxt,
+              "fish stripped of cachyos + grok, welcome greeting kept")
         ffjson = (root / "fastfetch" / "config.jsonc").read_text()
         check("__" not in ffjson and "system" in ffjson,
               "fastfetch config.jsonc rendered, no placeholders left")

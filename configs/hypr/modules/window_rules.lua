@@ -47,13 +47,14 @@ hl.window_rule({
     float = true,
 })
 
-hl.window_rule({
-    name   = "float-dolphin",
-    match  = { class = "org.kde.dolphin" },
-    float  = true,
-    size   = { 1500, 850 },
-    center = true,
-})
+-- hl.window_rule({
+--     name   = "float-dolphin",
+--     match  = { class = "org.kde.dolphin" },
+--     float  = true,
+--     size   = { 1500, 850 },
+--     center = true,
+-- })
+
 
 hl.window_rule({
     name   = "float-vibelark",

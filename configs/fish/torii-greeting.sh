@@ -43,6 +43,22 @@ if command -v nvidia-smi >/dev/null 2>&1; then
     gtemp=$(echo "$g" | awk -F, '{gsub(/ /,"");print $2}')
 fi
 
+# Fallback to AMDGPU (sysfs) if still undetected
+if [ "$gpu" = "--" ]; then
+    for gpath in /sys/class/drm/card*/device; do
+        if [ -f "$gpath/gpu_busy_percent" ]; then
+            gpu=$(cat "$gpath/gpu_busy_percent")
+            for hpath in "$gpath"/hwmon/hwmon* "$gpath"/hwmon*; do
+                if [ -f "$hpath/temp1_input" ]; then
+                    gtemp=$(( $(cat "$hpath/temp1_input") / 1000 ))
+                    break
+                fi
+            done
+            break
+        fi
+    done
+fi
+
 mt=$(awk '/MemTotal/{print $2}' /proc/meminfo)
 ma=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
 mu=$((mt-ma))
