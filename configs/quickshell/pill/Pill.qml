@@ -39,7 +39,8 @@ Item {
     readonly property bool wallpaperOpen: surface === "wallpaper"
     readonly property bool powerOpen: surface === "power"
     readonly property bool mediaOpen: surface === "media"
-    readonly property bool linkOpen: surface === "link"
+    readonly property bool notificationsOpen: surface === "notifications"
+    readonly property bool connectivityOpen: surface === "connectivity"
     readonly property bool batteryOpen: surface === "battery"
     readonly property bool settingsOpen: surface === "settings"
     readonly property bool keybindsOpen: surface === "keybinds"
@@ -61,13 +62,15 @@ Item {
     readonly property bool hasMedia: Players.list.length > 0
 
     /**
-     * Subview the link surface should land on when next opened. The wifi glance
+     * Subview the connectivity surface should land on when next opened. The wifi glance
      * sets "wifi" to drill straight to the network list; the inbox glance and
      * toast set "main". Reset once the surface closes so IPC opens land on main.
      */
-    property string linkInitialView: "main"
+    property string connectivityInitialView: "main"
 
     readonly property var netDevices: (typeof Networking !== "undefined" && Networking && Networking.devices) ? Networking.devices.values : []
+    readonly property var eth: netDevices.find(function(d) { return d && d.type === DeviceType.Wired && d.connected }) || null
+    readonly property bool wired: eth !== null
     readonly property var wifiDev: netDevices.find(function(d) { return d && d.type === DeviceType.Wifi }) || null
     readonly property bool wifiOn: (typeof Networking !== "undefined" && Networking) ? Networking.wifiEnabled : false
     readonly property var wifiNets: (wifiDev && wifiDev.networks) ? wifiDev.networks.values : []
@@ -202,7 +205,8 @@ Item {
         power:     { size: () => { surfaceItem(ldPower); return Qt.size(powerW, powerH); }, ame: () => surfaceItem(ldPower) },
         media:     { size: () => { surfaceItem(ldMedia); return Qt.size(mediaW, mediaH); }, ame: () => surfaceItem(ldMedia) },
         mixer:     { size: () => Qt.size(93 * Math.max(4, surfaceItem(ldMixer).faderCount) * s, mixerH), ame: () => surfaceItem(ldMixer) },
-        link:      { size: () => { const it = surfaceItem(ldLink); return Qt.size(it.desiredW, it.implicitHeight + 26 * s); }, ame: () => surfaceItem(ldLink) },
+        notifications: { size: () => { const it = surfaceItem(ldNotifications); return Qt.size(it.desiredW, it.implicitHeight + 26 * s); }, ame: () => surfaceItem(ldNotifications) },
+        connectivity:  { size: () => { const it = surfaceItem(ldConnectivity); return Qt.size(it.desiredW, it.implicitHeight + 26 * s); }, ame: () => surfaceItem(ldConnectivity) },
         battery:   { size: () => Qt.size(batteryW, surfaceItem(ldBattery).implicitHeight + 26 * s), ame: () => surfaceItem(ldBattery) },
         settings:  { size: () => Qt.size(settingsW, surfaceItem(ldSettings).implicitHeight + 29 * s), ame: () => surfaceItem(ldSettings) },
         keybinds:  { size: () => Qt.size(keybindsW, surfaceItem(ldKeybinds).implicitHeight + 29 * s), ame: () => surfaceItem(ldKeybinds) },
@@ -219,7 +223,6 @@ Item {
         idlelock:   { size: () => Qt.size(idlelockW, surfaceItem(ldIdlelock).implicitHeight + 29 * s), ame: () => surfaceItem(ldIdlelock) },
         animation:  { size: () => Qt.size(animationW, surfaceItem(ldAnimation).implicitHeight + 29 * s), ame: () => surfaceItem(ldAnimation) },
         fontpicker: { size: () => Qt.size(fontpickerW, surfaceItem(ldFontpicker).implicitHeight + 29 * s), ame: () => surfaceItem(ldFontpicker) }
-    })
 
     readonly property string mode: dragActive ? "dragOver"
         : (surfaceOpen && surfaces[surface] !== undefined ? surface
@@ -378,7 +381,7 @@ Item {
      * Escape should close the surface instead.
      */
     function linkBack() {
-        return (pill.linkOpen && ldLink.item) ? ldLink.item.back() : false;
+        return (pill.connectivityOpen && ldConnectivity.item) ? ldConnectivity.item.back() : false;
     }
 
     /**
@@ -728,7 +731,7 @@ Item {
         void pill.height;
         const drop = 12 * pill.s;
         if (soulTarget === "wifi")
-            return wifiIcon.mapToItem(pill, wifiIcon.width / 2, wifiIcon.height + drop * 0.55);
+            return connectivityIcon.mapToItem(pill, connectivityIcon.width / 2, connectivityIcon.height + drop * 0.55);
         if (soulTarget === "battery")
             return batteryIcon.mapToItem(pill, batteryIcon.width / 2, batteryIcon.height + drop * 0.55);
         if (soulTarget === "inbox")
@@ -1518,33 +1521,42 @@ Item {
 
                 Row {
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: (pill.wifiDev !== null && pill.wifiOn) || Battery.present
+                    visible: (pill.wifiDev !== null) || pill.wired || Battery.present
                     spacing: 12 * pill.s
 
                     Item {
-                        id: wifiIcon
+                        id: connectivityIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: pill.wifiDev !== null && pill.wifiOn
+                        visible: pill.wifiDev !== null || pill.wired
                         width: 17 * pill.s
                         height: 17 * pill.s
 
                         WifiGlyph {
                             anchors.centerIn: parent
+                            visible: !pill.wired
                             s: pill.s
                             level: pill.wifiLevel
                             on: pill.wifiOn
                         }
 
+                        GlyphIcon {
+                            anchors.fill: parent
+                            visible: pill.wired
+                            name: "ethernet"
+                            color: Theme.iconDim
+                            stroke: 1.7
+                        }
+
                         MouseArea {
-                            id: wifiArea
+                            id: connectivityArea
                             anchors.fill: parent
                             anchors.margins: -6 * pill.s
                             hoverEnabled: true
                             enabled: hover.live
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                pill.linkInitialView = "wifi";
-                                pill.requestSurface("link");
+                                pill.connectivityInitialView = "main";
+                                pill.requestSurface("connectivity");
                             }
                             onContainsMouseChanged: if (containsMouse) pill.soulTarget = "wifi"
                         }
@@ -1614,8 +1626,7 @@ Item {
                         enabled: hover.live
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            pill.linkInitialView = "main";
-                            pill.requestSurface("link");
+                            pill.requestSurface("notifications");
                         }
                         onContainsMouseChanged: if (containsMouse) pill.soulTarget = "inbox"
                     }
@@ -1793,7 +1804,8 @@ Item {
         onTriggered: {
             ldMixer.active = true;
             ldMedia.active = true;
-            ldLink.active = true;
+            ldNotifications.active = true;
+            ldConnectivity.active = true;
         }
     }
 
@@ -1880,19 +1892,31 @@ Item {
     }
 
     Loader {
-        id: ldLink
+        id: ldNotifications
         active: false
         anchors.fill: parent
-        sourceComponent: Link {
+        sourceComponent: Notifications {
             s: pill.s
-            open: pill.linkOpen
-            initialView: pill.linkInitialView
+            open: pill.notificationsOpen
             morphCloseness: pill.morphCloseness
             onRequestClose: pill.requestClose()
         }
     }
 
-    onLinkOpenChanged: if (!linkOpen) linkInitialView = "main"
+    Loader {
+        id: ldConnectivity
+        active: false
+        anchors.fill: parent
+        sourceComponent: Connectivity {
+            s: pill.s
+            open: pill.connectivityOpen
+            initialView: pill.connectivityInitialView
+            morphCloseness: pill.morphCloseness
+            onRequestClose: pill.requestClose()
+        }
+    }
+
+    onConnectivityOpenChanged: if (!connectivityOpen) connectivityInitialView = "main"
 
     Loader {
         id: ldBattery

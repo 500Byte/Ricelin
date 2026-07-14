@@ -78,7 +78,7 @@ PillSurface {
         }
         if (blLoader.item)
             out.push(blLoader.item);
-        out.push(vibFader, volFader, micFader);
+        out.push(volFader, micFader);
         return out;
     }
     readonly property bool surfaceHovered: hoverTracker.hovered
@@ -157,17 +157,7 @@ PillSurface {
 
     Component.onCompleted: Devices.detect()
 
-    property real pendingVibrance: -1
     property int pendingBacklight: -1
-
-    Timer {
-        id: vibDebounce
-        interval: 160
-        onTriggered: if (root.pendingVibrance >= 0) {
-            Devices.setVibrance(root.pendingVibrance);
-            root.pendingVibrance = -1;
-        }
-    }
 
     Timer {
         id: blDebounce
@@ -182,46 +172,7 @@ PillSurface {
         objects: [root.sink, root.source].concat(root.outputSinks).concat(root.inputSources).filter(Boolean)
     }
 
-    component IconChip: Rectangle {
-        id: chip
-        property string glyph: ""
-        property bool on: false
-        property string tipTitle: ""
-        property string tipDesc: ""
-        signal toggled()
 
-        width: 26 * root.s
-        height: 26 * root.s
-        radius: 8 * root.s
-        color: chip.on ? Theme.frameBg : "transparent"
-        border.width: 1
-        border.color: chip.on ? Theme.frameBorder : Theme.border
-
-        GlyphIcon {
-            anchors.centerIn: parent
-            width: 15 * root.s
-            height: 15 * root.s
-            name: chip.glyph
-            color: chip.on ? Theme.vermLit : Theme.iconDim
-            stroke: 1.7
-        }
-        HoverHandler {
-            id: chipHover
-        }
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: chip.toggled()
-        }
-
-        Tooltip {
-            s: root.s
-            placement: "below"
-            title: chip.tipTitle
-            desc: chip.tipDesc
-            show: chipHover.hovered
-        }
-    }
 
     /**
      * Header device picker: an icon-only button that toggles its dropdown. It
@@ -319,13 +270,7 @@ PillSurface {
                 onToggled: root.openPicker = root.openPicker === "in" ? "" : "in"
             }
             IconChip {
-                glyph: "dnd"
-                on: Flags.dnd
-                tipTitle: "Do not disturb"
-                tipDesc: "Silence notifications"
-                onToggled: Flags.dnd = !Flags.dnd
-            }
-            IconChip {
+                s: root.s
                 glyph: "awake"
                 on: Flags.keepAwake
                 tipTitle: "Keep awake"
@@ -333,6 +278,7 @@ PillSurface {
                 onToggled: Flags.keepAwake = !Flags.keepAwake
             }
             IconChip {
+                s: root.s
                 glyph: "sun"
                 on: Flags.nightLightMode !== "off"
                 tipTitle: "Night light"
@@ -340,6 +286,7 @@ PillSurface {
                 onToggled: NightLight.setMode(Flags.nightLightMode === "off" ? "on" : "off")
             }
             IconChip {
+                s: root.s
                 glyph: "gamepad"
                 on: Flags.gameMode
                 tipTitle: "Game mode"
@@ -559,19 +506,6 @@ PillSurface {
             }
         }
 
-        VFader {
-            id: vibFader
-            width: faderRow.colW
-            s: root.s
-            icon: "monitor"
-            subLabel: "Vibrance"
-            subPersistent: false
-            focused: root.focusIndex === root.faderCount - 3
-            value: Devices.vibrance / 100
-            valueLabel: Devices.vibrance + "%"
-            onMoved: (v) => Devices.vibrance = Math.round(v * 100)
-            onCommitted: (v) => { root.pendingVibrance = v * 100; vibDebounce.restart(); }
-        }
         VFader {
             id: volFader
             width: faderRow.colW
