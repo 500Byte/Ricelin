@@ -56,6 +56,7 @@ hl.window_rule({
 -- })
 
 
+hl.window_rule({
     name   = "float-vibelark",
     match  = { class = "App", title = "VibeLark" },
     float  = true,

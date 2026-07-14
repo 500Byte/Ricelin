@@ -346,7 +346,6 @@ PillSurface {
                     elide: Text.ElideRight
                 }
             }
->>>>>>> e65bb31 (feat: configure keyboard layout to Spanish and optimize QML bindings)
         }
 
         Item { width: 1; height: 4 * root.s }
