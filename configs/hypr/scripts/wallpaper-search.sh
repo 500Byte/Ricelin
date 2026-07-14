@@ -4,14 +4,20 @@ UA="Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/126.0"
 
 search() {
     local query="${1:-}"
+    local sort="${2:-relevance}"
+    local range="${3:-1M}"
+    local purity="${4:-100}"
     [ -n "$query" ] || { printf '[]\n'; return 0; }
 
     local enc raw
     enc=$(jq -rn --arg q "$query" '$q|@uri') || { printf '[]\n'; return 0; }
 
-    raw=$(curl -s --max-time 10 \
-        "https://wallhaven.cc/api/v1/search?q=${enc}&atleast=2560x1440&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi" \
-        -A "$UA")
+    local url="https://wallhaven.cc/api/v1/search?q=${enc}&atleast=2560x1440&purity=${purity}&sorting=${sort}&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi"
+    if [ "$sort" = "toplist" ]; then
+        url="${url}&top_range=${range}"
+    fi
+
+    raw=$(curl -s --max-time 10 "$url" -A "$UA")
     [ -n "$raw" ] || { printf '[]\n'; return 0; }
 
     printf '%s' "$raw" | jq -c '
@@ -69,7 +75,7 @@ download() {
 }
 
 case "${1:-}" in
-    search)   search "${2:-}" ;;
+    search)   search "${2:-}" "${3:-relevance}" "${4:-1M}" "${5:-100}" ;;
     download) download "${2:-}" ;;
     *)        printf '[]\n'; exit 0 ;;
 esac

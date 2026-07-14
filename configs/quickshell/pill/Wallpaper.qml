@@ -39,6 +39,57 @@ PillSurface {
     property string query: ""
     property var ddgResults: []
 
+    property string filterSort: "relevance"
+    property string filterRange: "1M"
+    property string filterPurity: "100"
+
+    function filterSortLabel(s) {
+        if (s === "relevance") return "Relevance";
+        if (s === "toplist") return "Top List";
+        if (s === "views") return "Most Viewed";
+        if (s === "random") return "Random";
+        if (s === "date_added") return "Date Added";
+        return s;
+    }
+
+    function filterRangeLabel(r) {
+        if (r === "1d") return "1 Day";
+        if (r === "1w") return "1 Week";
+        if (r === "1M") return "1 Month";
+        if (r === "3M") return "3 Months";
+        if (r === "6M") return "6 Months";
+        if (r === "1y") return "1 Year";
+        return r;
+    }
+
+    function cycleSort() {
+        const list = ["relevance", "toplist", "views", "random", "date_added"];
+        var idx = list.indexOf(filterSort);
+        filterSort = list[(idx + 1) % list.length];
+        triggerSearch();
+    }
+
+    function cycleRange() {
+        const list = ["1d", "1w", "1M", "3M", "6M", "1y"];
+        var idx = list.indexOf(filterRange);
+        filterRange = list[(idx + 1) % list.length];
+        triggerSearch();
+    }
+
+    function cyclePurity() {
+        filterPurity = filterPurity === "100" ? "110" : "100";
+        triggerSearch();
+    }
+
+    function triggerSearch() {
+        if (query.length > 0) {
+            debounce.stop();
+            searchProc.running = false;
+            searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
+            searchProc.running = true;
+        }
+    }
+
     /**
      * Active model and its select handler. The strip, navigation and empty
      * states all read these so the local and search views share one code path:
@@ -194,7 +245,7 @@ PillSurface {
                 root.ddgResults = [];
                 return;
             }
-            searchProc.command = ["bash", root.searchScript, "search", root.query];
+            searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
             searchProc.running = true;
         }
     }
@@ -269,6 +320,100 @@ PillSurface {
         }
     }
 
+    Row {
+        id: filterRow
+        anchors.top: searchField.bottom
+        anchors.topMargin: 6 * root.s
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 8 * root.s
+        visible: root.searching
+        opacity: root.searching ? 1 : 0
+        z: 30
+        Behavior on opacity { NumberAnimation { duration: Motion.standard } }
+
+        Rectangle {
+            id: sortChip
+            width: sortText.implicitWidth + 16 * root.s
+            height: 20 * root.s
+            radius: 10 * root.s
+            color: sortMouse.containsMouse ? Theme.frameBg : "transparent"
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: sortText
+                anchors.centerIn: parent
+                text: "Sort: " + root.filterSortLabel(root.filterSort)
+                color: Theme.cream
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                id: sortMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.cycleSort()
+            }
+        }
+
+        Rectangle {
+            id: rangeChip
+            visible: root.filterSort === "toplist"
+            width: rangeText.implicitWidth + 16 * root.s
+            height: 20 * root.s
+            radius: 10 * root.s
+            color: rangeMouse.containsMouse ? Theme.frameBg : "transparent"
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: rangeText
+                anchors.centerIn: parent
+                text: "Range: " + root.filterRangeLabel(root.filterRange)
+                color: Theme.cream
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                id: rangeMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.cycleRange()
+            }
+        }
+
+        Rectangle {
+            id: purityChip
+            width: purityText.implicitWidth + 16 * root.s
+            height: 20 * root.s
+            radius: 10 * root.s
+            color: purityMouse.containsMouse ? Theme.frameBg : "transparent"
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: purityText
+                anchors.centerIn: parent
+                text: "Purity: " + (root.filterPurity === "100" ? "SFW" : "SFW + Sketchy")
+                color: root.filterPurity === "100" ? Theme.cream : Theme.vermLit
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                id: purityMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.cyclePurity()
+            }
+        }
+    }
+
     Text {
         anchors.left: parent.left
         anchors.leftMargin: 20 * root.s
@@ -321,7 +466,7 @@ PillSurface {
             width: root.slotLerp(root.slotW, ao) * root.s
             height: root.slotLerp(root.slotH, ao) * root.s
             x: root.width / 2 + root.offsetX(off) - width / 2
-            y: (root.height - height) / 2
+            y: ((root.height - height) / 2) + (root.searching ? 14 * root.s : 0)
             z: 10 - ao
             visible: ao <= 5
             opacity: edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))
