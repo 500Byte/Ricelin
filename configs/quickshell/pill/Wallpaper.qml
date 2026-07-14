@@ -36,6 +36,7 @@ PillSurface {
      * shown, holds focus and the strip renders remote results for `query`.
      */
     property bool searching: false
+    onSearchingChanged: if (searching) triggerSearch();
     property string query: ""
     property var ddgResults: []
 
@@ -77,12 +78,18 @@ PillSurface {
     }
 
     function cyclePurity() {
-        filterPurity = filterPurity === "100" ? "110" : "100";
+        if (filterPurity === "100") {
+            filterPurity = "110";
+        } else if (filterPurity === "110") {
+            filterPurity = "111";
+        } else {
+            filterPurity = "100";
+        }
         triggerSearch();
     }
 
     function triggerSearch() {
-        if (query.length > 0) {
+        if (searching) {
             debounce.stop();
             searchProc.running = false;
             searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
@@ -96,7 +103,7 @@ PillSurface {
      * a populated query in search mode shows remote results, anything else the
      * local snapshot.
      */
-    readonly property var items: (searching && query.length > 0) ? ddgResults : Walls.entries
+    readonly property var items: searching ? ddgResults : Walls.entries
     readonly property int itemCount: items.length
 
     /**
@@ -199,28 +206,15 @@ PillSurface {
         searching = false;
         query = "";
         ddgResults = [];
-        searchField.text = "";
         centerOnCurrent();
     }
 
-    /**
-     * Begin a search seeded with the first typed character and move keyboard
-     * focus to the field so the rest of the query lands there. shell.qml routes
-     * the opening keystroke here and hands focus back when the search ends.
-     */
-    function startSearch(ch) {
-        searching = true;
-        focusIndex = 0;
-        pos = 0;
-        searchField.text = ch;
-        Qt.callLater(searchField.input.forceActiveFocus);
-    }
+    function startSearch(ch) {}
 
     onActiveChanged: if (active) {
         searching = false;
         query = "";
         ddgResults = [];
-        searchField.text = "";
         Walls.refresh();
         centerOnCurrent();
         hintShown = false;
@@ -290,40 +284,67 @@ PillSurface {
         }
     }
 
-    SearchField {
-        id: searchField
+    Row {
+        id: modeSelector
         anchors.top: parent.top
-        anchors.topMargin: 6 * root.s
-        anchors.left: parent.left
-        anchors.leftMargin: 20 * root.s
-        anchors.right: parent.right
-        anchors.rightMargin: 20 * root.s
-        s: root.s
-        kanji: "探"
-        placeholder: "Search wallpapers"
-        visible: root.searching
-        enabled: root.searching
-        horizontalNav: true
-        z: 30
-        onTextChanged: {
-            root.query = text;
-            debounce.restart();
+        anchors.topMargin: 8 * root.s
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 12 * root.s
+        z: 35
+
+        Rectangle {
+            id: localTab
+            width: 82 * root.s
+            height: 22 * root.s
+            radius: 11 * root.s
+            color: !root.searching ? Theme.tileBg : "transparent"
+            border.width: 1
+            border.color: !root.searching ? Theme.border : "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                text: "Local"
+                color: !root.searching ? Theme.cream : Theme.subtle
+                font.family: Theme.font
+                font.pixelSize: 10.5 * root.s
+                font.weight: !root.searching ? Font.Bold : Font.Normal
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.searching = false
+            }
         }
-        onMoved: (d) => root.move(d)
-        onAccepted: root.activate()
-        onDismissed: root.exitSearch()
-        onKeyPressed: (e) => {
-            if (e.key === Qt.Key_Backspace && root.query.length <= 1 && searchField.input.selectedText.length === 0) {
-                root.exitSearch();
-                e.accepted = true;
+
+        Rectangle {
+            id: onlineTab
+            width: 82 * root.s
+            height: 22 * root.s
+            radius: 11 * root.s
+            color: root.searching ? Theme.tileBg : "transparent"
+            border.width: 1
+            border.color: root.searching ? Theme.border : "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                text: "Wallhaven"
+                color: root.searching ? Theme.cream : Theme.subtle
+                font.family: Theme.font
+                font.pixelSize: 10.5 * root.s
+                font.weight: root.searching ? Font.Bold : Font.Normal
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.searching = true
             }
         }
     }
 
     Row {
         id: filterRow
-        anchors.top: searchField.bottom
-        anchors.topMargin: 6 * root.s
+        anchors.top: modeSelector.bottom
+        anchors.topMargin: 8 * root.s
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 8 * root.s
         visible: root.searching
@@ -398,11 +419,11 @@ PillSurface {
             Text {
                 id: purityText
                 anchors.centerIn: parent
-                text: "Purity: " + (root.filterPurity === "100" ? "SFW" : "SFW + Sketchy")
-                color: root.filterPurity === "100" ? Theme.cream : Theme.vermLit
+                text: "Purity: " + (root.filterPurity === "100" ? "SFW" : (root.filterPurity === "110" ? "Sketchy" : "NSFW"))
+                color: root.filterPurity === "100" ? Theme.cream : (root.filterPurity === "110" ? Theme.subtle : Theme.vermLit)
                 font.family: Theme.font
                 font.pixelSize: 9.5 * root.s
-                font.weight: Font.Medium
+                font.weight: Font.Bold
             }
             MouseArea {
                 id: purityMouse
@@ -466,7 +487,7 @@ PillSurface {
             width: root.slotLerp(root.slotW, ao) * root.s
             height: root.slotLerp(root.slotH, ao) * root.s
             x: root.width / 2 + root.offsetX(off) - width / 2
-            y: ((root.height - height) / 2) + (root.searching ? 14 * root.s : 0)
+            y: ((root.height - height) / 2) + (root.searching ? 20 * root.s : 0)
             z: 10 - ao
             visible: ao <= 5
             opacity: edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))

@@ -7,12 +7,14 @@ search() {
     local sort="${2:-relevance}"
     local range="${3:-1M}"
     local purity="${4:-100}"
-    [ -n "$query" ] || { printf '[]\n'; return 0; }
 
-    local enc raw
-    enc=$(jq -rn --arg q "$query" '$q|@uri') || { printf '[]\n'; return 0; }
+    local url="https://wallhaven.cc/api/v1/search?atleast=2560x1440&purity=${purity}&sorting=${sort}&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi"
+    if [ -n "$query" ]; then
+        local enc
+        enc=$(jq -rn --arg q "$query" '$q|@uri') || { printf '[]\n'; return 0; }
+        url="${url}&q=${enc}"
+    fi
 
-    local url="https://wallhaven.cc/api/v1/search?q=${enc}&atleast=2560x1440&purity=${purity}&sorting=${sort}&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi"
     if [ "$sort" = "toplist" ]; then
         url="${url}&top_range=${range}"
     fi
