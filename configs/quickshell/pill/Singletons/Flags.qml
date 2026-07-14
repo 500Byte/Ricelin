@@ -74,7 +74,7 @@ Singleton {
             property bool clockSeconds: false
             property bool showGlyphs: true
             property string paletteMode: "static"
-            /** Empty means fall back to ~/Ricelin/wallpapers. Lives in user state so an in-app update never clobbers a custom folder. */
+            /** Empty means fall back to ~/Pictures/Wallpapers. Lives in user state so an in-app update never clobbers a custom folder. */
             property string wallpaperDir: ""
             property real uiScale: 1.0
             property bool reduceMotion: false
