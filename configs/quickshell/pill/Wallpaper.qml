@@ -92,8 +92,10 @@ PillSurface {
         if (searching) {
             debounce.stop();
             searchProc.running = false;
-            searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
-            searchProc.running = true;
+            Qt.callLater(() => {
+                searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
+                searchProc.running = true;
+            });
         }
     }
 
