@@ -39,6 +39,7 @@ PillSurface {
     onSearchingChanged: if (searching) triggerSearch();
     property string query: ""
     property var ddgResults: []
+    property bool pendingSearch: false
 
     property string filterSort: "relevance"
     property string filterRange: "1M"
@@ -89,13 +90,15 @@ PillSurface {
     }
 
     function triggerSearch() {
-        if (searching) {
-            debounce.stop();
+        if (!searching) return;
+
+        if (searchProc.running) {
+            pendingSearch = true;
             searchProc.running = false;
-            Qt.callLater(() => {
-                searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
-                searchProc.running = true;
-            });
+        } else {
+            pendingSearch = false;
+            searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
+            searchProc.running = true;
         }
     }
 
@@ -261,6 +264,15 @@ PillSurface {
                 root.ddgResults = out;
                 root.focusIndex = 0;
                 root.pos = 0;
+            }
+        }
+        onExited: (exitCode) => {
+            if (root.pendingSearch) {
+                root.pendingSearch = false;
+                Qt.callLater(() => {
+                    searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
+                    searchProc.running = true;
+                });
             }
         }
     }
