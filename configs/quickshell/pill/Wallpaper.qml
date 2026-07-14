@@ -68,14 +68,12 @@ PillSurface {
         const list = ["relevance", "toplist", "views", "random", "date_added"];
         var idx = list.indexOf(filterSort);
         filterSort = list[(idx + 1) % list.length];
-        triggerSearch();
     }
 
     function cycleRange() {
         const list = ["1d", "1w", "1M", "3M", "6M", "1y"];
         var idx = list.indexOf(filterRange);
         filterRange = list[(idx + 1) % list.length];
-        triggerSearch();
     }
 
     function cyclePurity() {
@@ -86,7 +84,6 @@ PillSurface {
         } else {
             filterPurity = "100";
         }
-        triggerSearch();
     }
 
     function triggerSearch() {
@@ -266,7 +263,7 @@ PillSurface {
                 root.pos = 0;
             }
         }
-        onExited: (exitCode) => {
+        onExited: {
             if (root.pendingSearch) {
                 root.pendingSearch = false;
                 Qt.callLater(() => {
@@ -445,6 +442,33 @@ PillSurface {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.cyclePurity()
+            }
+        }
+
+        Rectangle {
+            id: applyChip
+            width: applyText.implicitWidth + 20 * root.s
+            height: 20 * root.s
+            radius: 10 * root.s
+            color: applyMouse.containsMouse ? Theme.vermLit : Theme.tileBg
+            border.width: 1
+            border.color: Theme.vermLit
+
+            Text {
+                id: applyText
+                anchors.centerIn: parent
+                text: "Apply 󰄬"
+                color: applyMouse.containsMouse ? Theme.tileBg : Theme.vermLit
+                font.family: Theme.font
+                font.pixelSize: 10 * root.s
+                font.weight: Font.Bold
+            }
+            MouseArea {
+                id: applyMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.triggerSearch()
             }
         }
     }
