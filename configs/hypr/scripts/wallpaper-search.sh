@@ -7,32 +7,42 @@ search() {
     local sort="${2:-relevance}"
     local range="${3:-1M}"
     local purity="${4:-100}"
+    local categories="${5:-111}"
+    local ratio="${6:-}"
+    local page="${7:-1}"
 
-    local url="https://wallhaven.cc/api/v1/search?atleast=2560x1440&purity=${purity}&sorting=${sort}&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi"
+    local url="https://wallhaven.cc/api/v1/search?atleast=2560x1440&purity=${purity}&sorting=${sort}&categories=${categories}&page=${page}&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi"
+
     if [ -n "$query" ]; then
         local enc
-        enc=$(jq -rn --arg q "$query" '$q|@uri') || { printf '[]\n'; return 0; }
+        enc=$(jq -rn --arg q "$query" '$q|@uri') || { printf '{"items":[],"page":1,"totalPages":0,"total":0}\n'; return 0; }
         url="${url}&q=${enc}"
     fi
 
     if [ "$sort" = "toplist" ]; then
-        url="${url}&top_range=${range}"
+        url="${url}&topRange=${range}"
+    fi
+
+    if [ -n "$ratio" ]; then
+        url="${url}&ratios=${ratio}"
     fi
 
     raw=$(curl -s --max-time 10 "$url" -A "$UA")
-    [ -n "$raw" ] || { printf '[]\n'; return 0; }
+    [ -n "$raw" ] || { printf '{"items":[],"page":1,"totalPages":0,"total":0}\n'; return 0; }
 
-    printf '%s' "$raw" | jq -c '
-        (.data // [])
-        | map({
-            image: .path,
-            thumb: .thumbs.small,
-            w: (.dimension_x // 0 | if . == null then 0 else . end),
-            h: (.dimension_y // 0 | if . == null then 0 else . end)
-          })
-        | map(select(.image != null and .image != ""))
-        | .[0:60]
-    ' 2>/dev/null || printf '[]\n'
+    printf '%s' "$raw" | jq -c '{
+        items: ((.data // [])
+            | map({
+                image: .path,
+                thumb: .thumbs.small,
+                w: (.dimension_x // 0 | if . == null then 0 else . end),
+                h: (.dimension_y // 0 | if . == null then 0 else . end)
+              })
+            | map(select(.image != null and .image != ""))),
+        page: (.meta.current_page // 1),
+        totalPages: (.meta.last_page // 1),
+        total: (.meta.total // 0)
+    }' 2>/dev/null || printf '{"items":[],"page":1,"totalPages":0,"total":0}\n'
 }
 
 download() {
@@ -77,7 +87,7 @@ download() {
 }
 
 case "${1:-}" in
-    search)   search "${2:-}" "${3:-relevance}" "${4:-1M}" "${5:-100}" ;;
+    search)   search "${2:-}" "${3:-relevance}" "${4:-1M}" "${5:-100}" "${6:-111}" "${7:-}" "${8:-1}" ;;
     download) download "${2:-}" ;;
     *)        printf '[]\n'; exit 0 ;;
 esac

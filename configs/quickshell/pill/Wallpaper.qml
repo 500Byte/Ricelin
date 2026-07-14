@@ -36,14 +36,31 @@ PillSurface {
      * shown, holds focus and the strip renders remote results for `query`.
      */
     property bool searching: false
-    onSearchingChanged: if (searching) triggerSearch();
+    onSearchingChanged: {
+        if (searching) {
+            triggerSearch();
+        } else {
+            currentPage = 1;
+            totalPages = 0;
+            totalResults = 0;
+            loadingMore = false;
+        }
+    }
     property string query: ""
     property var ddgResults: []
     property bool pendingSearch: false
+    property var activeSearchProcess: null
 
     property string filterSort: "relevance"
     property string filterRange: "1M"
     property string filterPurity: "100"
+    property string filterCategories: "111"
+    property string filterRatio: ""
+
+    property int currentPage: 1
+    property int totalPages: 0
+    property int totalResults: 0
+    property bool loadingMore: false
 
     function filterSortLabel(s) {
         if (s === "relevance") return "Relevance";
@@ -64,39 +81,124 @@ PillSurface {
         return r;
     }
 
+    function filterCategoriesLabel(c) {
+        if (c === "100") return "General";
+        if (c === "010") return "Anime";
+        if (c === "001") return "People";
+        if (c === "111") return "All";
+        if (c === "110") return "Gen+Anime";
+        if (c === "101") return "Gen+People";
+        if (c === "011") return "Ani+People";
+        return c;
+    }
+
+    function filterRatioLabel(r) {
+        if (r === "") return "Any";
+        if (r === "16x9") return "16:9";
+        if (r === "21x9") return "21:9";
+        if (r === "16x10") return "16:10";
+        if (r === "4x3") return "4:3";
+        if (r === "9x16") return "9:16";
+        return r;
+    }
+
     function cycleSort() {
         const list = ["relevance", "toplist", "views", "random", "date_added"];
         var idx = list.indexOf(filterSort);
         filterSort = list[(idx + 1) % list.length];
+        currentPage = 1;
+        loadingMore = false;
+        debouncedSearch.restart();
     }
 
     function cycleRange() {
         const list = ["1d", "1w", "1M", "3M", "6M", "1y"];
         var idx = list.indexOf(filterRange);
         filterRange = list[(idx + 1) % list.length];
+        currentPage = 1;
+        loadingMore = false;
+        debouncedSearch.restart();
     }
 
     function cyclePurity() {
-        if (filterPurity === "100") {
-            filterPurity = "110";
-        } else if (filterPurity === "110") {
-            filterPurity = "111";
-        } else {
-            filterPurity = "100";
-        }
+        const list = ["100", "010", "111"];
+        var idx = list.indexOf(filterPurity);
+        filterPurity = list[(idx + 1) % list.length];
+        currentPage = 1;
+        loadingMore = false;
+        debouncedSearch.restart();
+    }
+
+    function cycleCategories() {
+        const list = ["111", "100", "010", "001", "110", "101", "011"];
+        var idx = list.indexOf(filterCategories);
+        filterCategories = list[(idx + 1) % list.length];
+        currentPage = 1;
+        loadingMore = false;
+        debouncedSearch.restart();
+    }
+
+    function cycleRatio() {
+        const list = ["", "16x9", "21x9", "16x10", "4x3", "9x16"];
+        var idx = list.indexOf(filterRatio);
+        filterRatio = list[(idx + 1) % list.length];
+        currentPage = 1;
+        loadingMore = false;
+        debouncedSearch.restart();
+    }
+
+    Timer {
+        id: debouncedSearch
+        interval: 350
+        repeat: false
+        onTriggered: root.triggerSearch()
     }
 
     function triggerSearch() {
         if (!searching) return;
 
-        if (searchProc.running) {
-            pendingSearch = true;
-            searchProc.running = false;
-        } else {
-            pendingSearch = false;
-            searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
-            searchProc.running = true;
+        if (activeSearchProcess) {
+            var oldProc = activeSearchProcess;
+            activeSearchProcess = null;
+            oldProc.running = false;
+            Qt.callLater(() => oldProc.destroy());
         }
+
+        var isFirstPage = root.currentPage === 1;
+
+        var proc = processComponent.createObject(root, {
+            command: ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity, root.filterCategories, root.filterRatio, root.currentPage],
+            callback: (text) => {
+                try {
+                    var result = JSON.parse(text);
+                    var items = result.items || [];
+                    root.totalPages = result.totalPages || 0;
+                    root.totalResults = result.total || 0;
+                    if (isFirstPage) {
+                        root.ddgResults = items;
+                        root.focusIndex = 0;
+                        root.pos = 0;
+                    } else {
+                        root.ddgResults = root.ddgResults.concat(items);
+                    }
+                } catch (e) {
+                    if (isFirstPage) {
+                        root.ddgResults = [];
+                    }
+                }
+                root.loadingMore = false;
+            }
+        });
+
+        activeSearchProcess = proc;
+        proc.running = true;
+    }
+
+    function loadMore() {
+        if (loadingMore || currentPage >= totalPages) return;
+        loadingMore = true;
+        currentPage++;
+        triggerSearch();
     }
 
     /**
@@ -104,9 +206,21 @@ PillSurface {
      * states all read these so the local and search views share one code path:
      * a populated query in search mode shows remote results, anything else the
      * local snapshot.
+     *
+     * When in search mode with more pages available, a sentinel object
+     * {__loadMore: true} is appended so the Repeater can render a "+"
+     * button as the final tile.
      */
-    readonly property var items: searching ? ddgResults : Walls.entries
-    readonly property int itemCount: items.length
+    readonly property var items: {
+        if (searching) {
+            if (currentPage < totalPages) {
+                return ddgResults.concat([{__loadMore: true}]);
+            }
+            return ddgResults;
+        }
+        return Walls.entries;
+    }
+    readonly property int itemCount: searching ? ddgResults.length : Walls.entries.length
 
     /**
      * Gesture hint visibility. Hidden while the focus is moving so paging
@@ -233,43 +347,15 @@ PillSurface {
 
     readonly property string searchScript: Quickshell.env("HOME") + "/.config/hypr/scripts/wallpaper-search.sh"
 
-    Timer {
-        id: debounce
-        interval: 350
-        onTriggered: {
-            if (root.query.length === 0) {
-                root.ddgResults = [];
-                return;
-            }
-            searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
-            searchProc.running = true;
-        }
-    }
-
-    Process {
-        id: searchProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var out = [];
-                try {
-                    var parsed = JSON.parse(this.text);
-                    if (Array.isArray(parsed))
-                        out = parsed;
-                } catch (e) {
-                    out = [];
+    Component {
+        id: processComponent
+        Process {
+            id: procObj
+            property var callback
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    if (procObj.callback) procObj.callback(this.text);
                 }
-                root.ddgResults = out;
-                root.focusIndex = 0;
-                root.pos = 0;
-            }
-        }
-        onExited: {
-            if (root.pendingSearch) {
-                root.pendingSearch = false;
-                Qt.callLater(() => {
-                    searchProc.command = ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity];
-                    searchProc.running = true;
-                });
             }
         }
     }
@@ -430,8 +516,8 @@ PillSurface {
             Text {
                 id: purityText
                 anchors.centerIn: parent
-                text: "Purity: " + (root.filterPurity === "100" ? "SFW" : (root.filterPurity === "110" ? "Sketchy" : "NSFW"))
-                color: root.filterPurity === "100" ? Theme.cream : (root.filterPurity === "110" ? Theme.subtle : Theme.vermLit)
+                text: "Purity: " + (root.filterPurity === "100" ? "SFW" : (root.filterPurity === "010" ? "Sketchy" : "All"))
+                color: root.filterPurity === "100" ? Theme.cream : (root.filterPurity === "010" ? Theme.subtle : Theme.vermLit)
                 font.family: Theme.font
                 font.pixelSize: 9.5 * root.s
                 font.weight: Font.Bold
@@ -446,29 +532,56 @@ PillSurface {
         }
 
         Rectangle {
-            id: applyChip
-            width: applyText.implicitWidth + 20 * root.s
+            id: categoriesChip
+            width: categoriesText.implicitWidth + 16 * root.s
             height: 20 * root.s
             radius: 10 * root.s
-            color: applyMouse.containsMouse ? Theme.vermLit : Theme.tileBg
+            color: categoriesMouse.containsMouse ? Theme.frameBg : "transparent"
             border.width: 1
-            border.color: Theme.vermLit
+            border.color: Theme.border
 
             Text {
-                id: applyText
+                id: categoriesText
                 anchors.centerIn: parent
-                text: "Apply 󰄬"
-                color: applyMouse.containsMouse ? Theme.tileBg : Theme.vermLit
+                text: "Cat: " + root.filterCategoriesLabel(root.filterCategories)
+                color: Theme.cream
                 font.family: Theme.font
-                font.pixelSize: 10 * root.s
-                font.weight: Font.Bold
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
             }
             MouseArea {
-                id: applyMouse
+                id: categoriesMouse
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.triggerSearch()
+                onClicked: root.cycleCategories()
+            }
+        }
+
+        Rectangle {
+            id: ratioChip
+            width: ratioText.implicitWidth + 16 * root.s
+            height: 20 * root.s
+            radius: 10 * root.s
+            color: ratioMouse.containsMouse ? Theme.frameBg : "transparent"
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: ratioText
+                anchors.centerIn: parent
+                text: "Ratio: " + root.filterRatioLabel(root.filterRatio)
+                color: Theme.cream
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                id: ratioMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.cycleRatio()
             }
         }
     }
@@ -496,47 +609,74 @@ PillSurface {
             required property int index
             required property var modelData
 
-            readonly property string thumb: modelData.thumb !== undefined ? modelData.thumb : ""
-            readonly property bool remote: modelData.image !== undefined
-            readonly property string thumbSource: remote ? thumb : ("file://" + thumb)
+            readonly property bool isLoadMore: modelData && modelData.__loadMore === true
+
+            // Load-more sentinel: render a "+" button
+            visible: isLoadMore ? ao <= 5 : true
+            width: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotW, ao) * root.s
+            height: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotH, ao) * root.s
+            x: root.width / 2 + root.offsetX(off) - width / 2
+            y: ((root.height - height) / 2) + (root.searching ? 20 * root.s : 0)
+            z: 10 - ao
+            opacity: isLoadMore ? (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))) : (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao)))
 
             readonly property real off: index - root.pos
             readonly property real ao: Math.abs(off)
             readonly property bool focused: index === root.focusIndex
             readonly property real bright: root.slotLerp(root.slotBright, ao)
             readonly property real sat: root.slotLerp(root.slotSat, ao)
-            readonly property real corner: (8 + 2 * Math.max(0, 1 - ao)) * root.s
+            readonly property real corner: isLoadMore ? (30 * root.s) : (8 + 2 * Math.max(0, 1 - ao)) * root.s
 
             readonly property real hold: trashHeat.hold
-            readonly property bool committing: trashHeat.hold >= trashHeat.tapThreshold
-            readonly property real commitProgress: Math.max(0, (trashHeat.hold - trashHeat.tapThreshold) / (1 - trashHeat.tapThreshold))
+            readonly property bool committing: !isLoadMore && trashHeat.hold >= trashHeat.tapThreshold
+            readonly property real commitProgress: !isLoadMore ? Math.max(0, (trashHeat.hold - trashHeat.tapThreshold) / (1 - trashHeat.tapThreshold)) : 0
 
-            /**
-             * Fade a tile out as its outer edge nears the clipped strip
-             * boundary, so the strip ends soften instead of getting hard-cut by
-             * the pill's clip.
-             */
+            readonly property string thumb: modelData.thumb !== undefined ? modelData.thumb : ""
+            readonly property bool remote: modelData.image !== undefined
+            readonly property string thumbSource: remote ? thumb : ("file://" + thumb)
+
             readonly property real edgeFade: {
                 var soft = 70 * root.s;
                 var gap = Math.min(x, root.width - (x + width));
                 return Math.max(0, Math.min(1, gap / soft));
             }
 
-            width: root.slotLerp(root.slotW, ao) * root.s
-            height: root.slotLerp(root.slotH, ao) * root.s
-            x: root.width / 2 + root.offsetX(off) - width / 2
-            y: ((root.height - height) / 2) + (root.searching ? 20 * root.s : 0)
-            z: 10 - ao
-            visible: ao <= 5
-            opacity: edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))
+            onFocusedChanged: if (!focused && !isLoadMore) trashHeat.cancel()
 
-            onFocusedChanged: if (!focused) trashHeat.cancel()
+            // Load-more tile: circle with "+"
+            ClippingRectangle {
+                id: loadMoreCard
+                anchors.fill: parent
+                radius: tile.corner
+                color: loadMoreMouse.containsMouse ? Theme.tileBg : Theme.frameBg
+                border.width: 1
+                border.color: Theme.border
+                visible: tile.isLoadMore
 
+                Text {
+                    anchors.centerIn: parent
+                    text: "+"
+                    color: loadMoreMouse.containsMouse ? Theme.ghost : Theme.cream
+                    font.family: Theme.font
+                    font.pixelSize: 22 * root.s
+                    font.weight: Font.Light
+                }
+                MouseArea {
+                    id: loadMoreMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.loadMore()
+                }
+            }
+
+            // Normal wallpaper tile
             ClippingRectangle {
                 id: card
                 anchors.fill: parent
                 radius: tile.corner
                 color: Theme.tileBg
+                visible: !tile.isLoadMore
 
                 layer.enabled: true
                 layer.effect: MultiEffect {
@@ -652,7 +792,8 @@ PillSurface {
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
+                enabled: !tile.isLoadMore
+                cursorShape: tile.isLoadMore ? Qt.ArrowCursor : Qt.PointingHandCursor
                 onPressed: {
                     if (!tile.focused)
                         return;
@@ -670,11 +811,11 @@ PillSurface {
 
     Text {
         anchors.centerIn: parent
-        visible: root.itemCount === 0 && !searchProc.running
+        visible: root.itemCount === 0 && (!root.activeSearchProcess || !root.activeSearchProcess.running)
         text: {
             if (!root.searching)
                 return "No wallpapers in ~/Pictures/Wallpapers";
-            return root.query.length ? "no results" : "No wallpapers in ~/Pictures/Wallpapers";
+            return "no results";
         }
         color: Theme.faint
         font.family: Theme.font
@@ -683,7 +824,7 @@ PillSurface {
 
     Text {
         anchors.centerIn: parent
-        visible: searchProc.running
+        visible: root.activeSearchProcess && root.activeSearchProcess.running
         text: "searching…"
         color: Theme.faint
         font.family: Theme.font
