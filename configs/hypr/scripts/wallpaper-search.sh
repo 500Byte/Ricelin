@@ -6,25 +6,21 @@ search() {
     local query="${1:-}"
     [ -n "$query" ] || { printf '[]\n'; return 0; }
 
-    local enc vqd raw
+    local enc raw
     enc=$(jq -rn --arg q "$query" '$q|@uri') || { printf '[]\n'; return 0; }
 
-    vqd=$(curl -s --max-time 10 "https://duckduckgo.com/?q=${enc}&iax=images&ia=images" -A "$UA" \
-        | grep -oP 'vqd=\\?"?\K[0-9-]+' | head -1)
-    [ -n "$vqd" ] || { printf '[]\n'; return 0; }
-
     raw=$(curl -s --max-time 10 \
-        "https://duckduckgo.com/i.js?l=us-en&o=json&q=${enc}&vqd=${vqd}&f=,,,&p=-1" \
-        -A "$UA" -H "Referer: https://duckduckgo.com/")
+        "https://wallhaven.cc/api/v1/search?q=${enc}&atleast=2560x1440&apikey=EC0aZgPiNJsb3Nq9TsRoyub16cQLhLDi" \
+        -A "$UA")
     [ -n "$raw" ] || { printf '[]\n'; return 0; }
 
     printf '%s' "$raw" | jq -c '
-        (.results // [])
+        (.data // [])
         | map({
-            image: .image,
-            thumb: (.thumbnail // .image),
-            w: (.width // 0 | if . == null then 0 else . end),
-            h: (.height // 0 | if . == null then 0 else . end)
+            image: .path,
+            thumb: .thumbs.small,
+            w: (.dimension_x // 0 | if . == null then 0 else . end),
+            h: (.dimension_y // 0 | if . == null then 0 else . end)
           })
         | map(select(.image != null and .image != ""))
         | .[0:60]
@@ -58,7 +54,7 @@ download() {
         *)    ext=png ;;
     esac
 
-    out="$dir/ddg-$(date +%s)-${RANDOM}.${ext}"
+    out="$dir/wallhaven-$(date +%s)-${RANDOM}.${ext}"
 
     if [ "$ext" = "png" ] && [ "$fmt" != "PNG" ]; then
         magick "${tmp}[0]" -strip "png:$tmp.out" 2>/dev/null || exit 1
