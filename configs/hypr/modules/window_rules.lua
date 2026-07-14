@@ -56,12 +56,18 @@ hl.window_rule({
 -- })
 
 
-hl.window_rule({
     name   = "float-vibelark",
     match  = { class = "App", title = "VibeLark" },
     float  = true,
     size   = { 1480, 960 },
     center = true,
+})
+
+hl.window_rule({
+    name    = "float-romestead",
+    match   = { class = "(romestead|steam_app_1805320)" },
+    float   = true,
+    pin     = true,
 })
 
 hl.window_rule({

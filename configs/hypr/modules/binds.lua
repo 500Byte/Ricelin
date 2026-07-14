@@ -6,6 +6,10 @@ hl.bind(mod .. " + W",         hl.dsp.exec_cmd("firefox"))
 hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen())
 hl.bind(mod .. " + E",         hl.dsp.exec_cmd("dolphin"))
 hl.bind(mod .. " + F",         hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mod .. " + ntilde", function()
+    hl.dispatch(hl.dsp.window.float({ action = "enable" }))
+    hl.dispatch(hl.dsp.window.pin({ action = "toggle" }))
+end)
 hl.bind(mod .. " + M",         hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/minimize-toggle.sh"))
 hl.bind(mod .. " + SHIFT + M", hl.dsp.workspace.toggle_special("minimized"))
 
@@ -46,6 +50,19 @@ hl.bind(mod .. " + S",         hl.dsp.workspace.toggle_special("stash"))
 hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/special-toggle.sh stash"))
 
 hl.bind(mod .. " + SHIFT + C",  hl.dsp.exec_cmd("hyprpicker -a"))
+
+local function zoomfunction(value)
+    local zoomvalue = hl.get_config("cursor:zoom_factor")
+    if (zoomvalue + value) > 3.0 then
+        hl.config({ cursor = { zoom_factor = 3.0 } })
+    elseif (zoomvalue + value) < 1.0 then
+        hl.config({ cursor = { zoom_factor = 1.0 } })
+    else
+        hl.config({ cursor = { zoom_factor = zoomvalue + value } })
+    end
+end
+hl.bind(mod .. " + Plus",  function() zoomfunction(0.3) end,  { repeating = true })
+hl.bind(mod .. " + Minus", function() zoomfunction(-0.3) end, { repeating = true })
 
 hl.bind(mod .. " + Space",      hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/open-surface.sh launcher"))
 hl.bind(mod .. " + V",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/open-surface.sh clipboard"))

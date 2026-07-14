@@ -68,3 +68,5 @@ docs/
 __pycache__/
 configs/hypr/hyprsunset.conf
 .impeccable/
+AGENTS.md
+GEMINI.md
