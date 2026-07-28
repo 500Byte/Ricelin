@@ -477,6 +477,45 @@ PillSurface {
                 font.pixelSize: 10.5 * root.s
                 font.weight: (root.searching && root.searchMode === "moewalls") ? Font.Bold : Font.Normal
             }
+
+            TextInput {
+                id: moeSearchInput
+                opacity: 0
+                width: 1
+                height: 1
+                focus: root.searching && root.searchMode === "moewalls"
+                onFocusChanged: {
+                    if (focus && !(root.searching && root.searchMode === "moewalls")) {
+                        focus = false;
+                    }
+                }
+                onTextChanged: {
+                    root.query = text;
+                    root.currentPage = 1;
+                    root.loadingMore = false;
+                    debouncedSearch.restart();
+                }
+                Connections {
+                    target: root
+                    function onSearchingChanged() {
+                        if (root.searching && root.searchMode === "moewalls") {
+                            moeSearchInput.text = root.query;
+                            moeSearchInput.forceActiveFocus();
+                        } else {
+                            moeSearchInput.text = "";
+                        }
+                    }
+                    function onSearchModeChanged() {
+                        if (root.searching && root.searchMode === "moewalls") {
+                            moeSearchInput.text = root.query;
+                            moeSearchInput.forceActiveFocus();
+                        } else {
+                            moeSearchInput.text = "";
+                        }
+                    }
+                }
+            }
+
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
@@ -484,6 +523,7 @@ PillSurface {
                     root.searchMode = "moewalls";
                     root.searching = true;
                     root.triggerSearch();
+                    moeSearchInput.forceActiveFocus();
                 }
             }
         }
