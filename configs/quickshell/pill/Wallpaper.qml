@@ -35,6 +35,8 @@ PillSurface {
      * watched for the first printable character; while on the search field is
      * shown, holds focus and the strip renders remote results for `query`.
      */
+    property string searchMode: "wallhaven" // "wallhaven" or "moewalls"
+
     property bool searching: false
     onSearchingChanged: {
         if (searching) {
@@ -166,20 +168,34 @@ PillSurface {
 
         var isFirstPage = root.currentPage === 1;
 
+        var cmdLine = root.searchMode === "moewalls"
+            ? ["bash", root.searchScript, "search_moewalls", root.query]
+            : ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity, root.filterCategories, root.filterRatio, root.currentPage];
+
         var proc = processComponent.createObject(root, {
-            command: ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity, root.filterCategories, root.filterRatio, root.currentPage],
+            command: cmdLine,
             callback: (text) => {
                 try {
-                    var result = JSON.parse(text);
-                    var items = result.items || [];
-                    root.totalPages = result.totalPages || 0;
-                    root.totalResults = result.total || 0;
-                    if (isFirstPage) {
+                    var items = JSON.parse(text);
+                    if (root.searchMode === "moewalls") {
+                        // Moewalls returns a flat array of video entries
+                        root.totalPages = 1;
+                        root.totalResults = items.length;
                         root.ddgResults = items;
                         root.focusIndex = 0;
                         root.pos = 0;
                     } else {
-                        root.ddgResults = root.ddgResults.concat(items);
+                        var result = items;
+                        var resultItems = result.items || [];
+                        root.totalPages = result.totalPages || 0;
+                        root.totalResults = result.total || 0;
+                        if (isFirstPage) {
+                            root.ddgResults = resultItems;
+                            root.focusIndex = 0;
+                            root.pos = 0;
+                        } else {
+                            root.ddgResults = root.ddgResults.concat(resultItems);
+                        }
                     }
                 } catch (e) {
                     if (isFirstPage) {
@@ -195,6 +211,7 @@ PillSurface {
     }
 
     function loadMore() {
+        if (root.searchMode === "moewalls") return;
         if (loadingMore || currentPage >= totalPages) return;
         loadingMore = true;
         currentPage++;
@@ -213,7 +230,7 @@ PillSurface {
      */
     readonly property var items: {
         if (searching) {
-            if (currentPage < totalPages) {
+            if (searchMode === "wallhaven" && currentPage < totalPages) {
                 return ddgResults.concat([{__loadMore: true}]);
             }
             return ddgResults;
@@ -409,7 +426,9 @@ PillSurface {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.searching = false
+                onClicked: {
+                    root.searching = false;
+                }
             }
         }
 
@@ -418,22 +437,54 @@ PillSurface {
             width: 82 * root.s
             height: 22 * root.s
             radius: 11 * root.s
-            color: root.searching ? Theme.tileBg : "transparent"
+            color: (root.searching && root.searchMode === "wallhaven") ? Theme.tileBg : "transparent"
             border.width: 1
-            border.color: root.searching ? Theme.border : "transparent"
+            border.color: (root.searching && root.searchMode === "wallhaven") ? Theme.border : "transparent"
 
             Text {
                 anchors.centerIn: parent
                 text: "Wallhaven"
-                color: root.searching ? Theme.cream : Theme.subtle
+                color: (root.searching && root.searchMode === "wallhaven") ? Theme.cream : Theme.subtle
                 font.family: Theme.font
                 font.pixelSize: 10.5 * root.s
-                font.weight: root.searching ? Font.Bold : Font.Normal
+                font.weight: (root.searching && root.searchMode === "wallhaven") ? Font.Bold : Font.Normal
             }
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.searching = true
+                onClicked: {
+                    root.searchMode = "wallhaven";
+                    root.searching = true;
+                    root.triggerSearch();
+                }
+            }
+        }
+
+        Rectangle {
+            id: moeTab
+            width: 82 * root.s
+            height: 22 * root.s
+            radius: 11 * root.s
+            color: (root.searching && root.searchMode === "moewalls") ? Theme.tileBg : "transparent"
+            border.width: 1
+            border.color: (root.searching && root.searchMode === "moewalls") ? Theme.border : "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                text: "MoeWalls"
+                color: (root.searching && root.searchMode === "moewalls") ? Theme.cream : Theme.subtle
+                font.family: Theme.font
+                font.pixelSize: 10.5 * root.s
+                font.weight: (root.searching && root.searchMode === "moewalls") ? Font.Bold : Font.Normal
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    root.searchMode = "moewalls";
+                    root.searching = true;
+                    root.triggerSearch();
+                }
             }
         }
     }
@@ -444,8 +495,8 @@ PillSurface {
         anchors.topMargin: 8 * root.s
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 8 * root.s
-        visible: root.searching
-        opacity: root.searching ? 1 : 0
+        visible: root.searching && root.searchMode === "wallhaven"
+        opacity: (root.searching && root.searchMode === "wallhaven") ? 1 : 0
         z: 30
         Behavior on opacity { NumberAnimation { duration: Motion.standard } }
 
@@ -616,7 +667,7 @@ PillSurface {
             width: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotW, ao) * root.s
             height: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotH, ao) * root.s
             x: root.width / 2 + root.offsetX(off) - width / 2
-            y: ((root.height - height) / 2) + (root.searching ? 20 * root.s : 0)
+            y: ((root.height - height) / 2) + ((root.searching && root.searchMode === "wallhaven") ? 20 * root.s : 0)
             z: 10 - ao
             opacity: isLoadMore ? (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))) : (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao)))
 
