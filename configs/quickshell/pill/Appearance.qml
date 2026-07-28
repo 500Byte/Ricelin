@@ -66,7 +66,7 @@ SettingsSurface {
     Process {
         id: dynamicProc
         command: ["sh", "-c",
-            "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper\"; pic=$(cat \"$f\" 2>/dev/null); [ -f \"$pic\" ] && python3 \"$HOME/.config/hypr/scripts/wallcolors.py\" \"$pic\" >/dev/null 2>&1; hyprctl reload >/dev/null 2>&1; busctl --user call com.mitchellh.ghostty /com/mitchellh/ghostty org.gtk.Actions Activate \"sava{sv}\" reload-config 0 0 >/dev/null 2>&1 || true"]
+            "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper\"; pic=$(cat \"$f\" 2>/dev/null); case \"$pic\" in *.[Mm][Pp]4|*.[Ww][Ee][Bb][Mm]|*.[Mm][Kk][Vv]|*.[Mm][Oo][Vv]) pic=\"${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper-still.png\";; esac; [ -f \"$pic\" ] && python3 \"$HOME/.config/hypr/scripts/wallcolors.py\" \"$pic\" >/dev/null 2>&1; hyprctl reload >/dev/null 2>&1; busctl --user call com.mitchellh.ghostty /com/mitchellh/ghostty org.gtk.Actions Activate \"sava{sv}\" reload-config 0 0 >/dev/null 2>&1 || true"]
     }
 
     Connections {
@@ -87,6 +87,7 @@ SettingsSurface {
         { item: glyphRow, kind: "toggle", get: function () { return Flags.showGlyphs; }, set: function (v) { Flags.showGlyphs = v; } },
         { item: vizRow, kind: "toggle", get: function () { return Flags.musicViz; }, set: function (v) { Flags.musicViz = v; } },
         { item: paletteRow, kind: "seg", vals: ["static", "dynamic", "manual"], get: function () { return Flags.paletteMode; }, set: function (v) { root.applyMode(v); } },
+        { item: randomRow, kind: "seg", vals: ["all", "cursor"], get: function () { return Flags.randomScope; }, set: function (v) { Flags.randomScope = v; } },
         { item: scaleRow, kind: "seg", vals: [0.9, 1.0, 1.1, 1.25], get: function () { return Flags.uiScale; }, set: function (v) { Flags.uiScale = v; } },
         { item: motionRow, kind: "toggle", get: function () { return Flags.reduceMotion; }, set: function (v) { Flags.reduceMotion = v; } },
         { item: fontRow, kind: "nav", surface: "fontpicker" }
@@ -367,6 +368,20 @@ SettingsSurface {
                         Behavior on opacity { NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
                     }
                 }
+            }
+        }
+
+        SettingsRow {
+            id: randomRow
+            surface: root
+            name: "Random wallpaper"
+            icon: "monitor"
+
+            SettingsSeg {
+                s: root.s
+                options: [{ label: "All screens", value: "all" }, { label: "Cursor screen", value: "cursor" }]
+                value: Flags.randomScope
+                onPicked: (v) => Flags.randomScope = v
             }
         }
 

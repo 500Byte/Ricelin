@@ -10,9 +10,15 @@ import "Singletons"
  * summon them. The three built-in rows (Stash, Private, Minimized) sit on top;
  * below them every user-defined space from the Spaces store gets its own row with
  * a Super+<key> chip, a chevron into its app manager (SpaceApps) and a remove
- * control on hover. A dashed "Add Workspace" bar at the bottom swaps the surface
- * into a create form — name, description and a captured single-letter key — that
- * makes a new space on confirm.
+ * control on hover. Clicking a row's NAME — built-in or custom — folds it open
+ * into an inline edit mode (editable name field plus a glyph strip below) saved
+ * into spaces.lua; the rest of the row keeps its tap target (the stash surface,
+ * the app manager). A custom row's key chip starts an inline letter capture that
+ * rebinds the space's trigger, refused with an inline hint on a clash. Built-in
+ * edits persist as display-only override entries; their keys live in binds.lua.
+ * A dashed "Add Workspace" bar at the bottom swaps the surface into a create
+ * form — name, description and a captured single-letter key — that makes a new
+ * space on confirm.
  *
  * Built on the plain surface base like Stash and Keybinds; the host routes its
  * header-back to the settings index (or, while the form is open, back to the
@@ -39,11 +45,49 @@ PillSurface {
     property string formDesc: ""
     property string formKey: ""
 
+    property string editId: ""
+    property string editName: ""
+    property string editGlyph: ""
+    property string rebindId: ""
+    property string conflictId: ""
+
+    /** Preset glyph picks for a space; every name exists in GlyphIcon's map. */
+    readonly property var glyphChoices: ["layers", "lock", "sparkles", "app-window", "waves", "moon", "sun", "palette", "mic", "speaker"]
+
     readonly property var spaces: [
-        { name: "Stash", key: "Super + S", note: "Background apps that open here", surface: "stash" },
-        { name: "Private", key: "Super + P", note: "Hidden scratchpad", surface: "" },
-        { name: "Minimized", key: "Super + Shift + M", note: "Minimized windows", surface: "" }
+        { id: "stash", name: "Stash", key: "Super + S", note: "Background apps that open here", surface: "stash", glyph: "layers" },
+        { id: "private", name: "Private", key: "Super + P", note: "Hidden scratchpad", surface: "", glyph: "lock" },
+        { id: "minimized", name: "Minimized", key: "Super + Shift + M", note: "Minimized windows", surface: "", glyph: "chevron-down" }
     ]
+
+    /** Custom spaces only: built-in display-override entries stay out of the list. */
+    readonly property var customSpaces: {
+        var sl = Spaces.list;
+        var out = [];
+        for (var i = 0; i < sl.length; i++)
+            if (!Spaces.reserved(sl[i].id))
+                out.push(sl[i]);
+        return out;
+    }
+
+    /** The spaces.lua display-override entry for a built-in id, or null when unedited. */
+    function builtinEntry(id) {
+        var sl = Spaces.list;
+        for (var i = 0; i < sl.length; i++)
+            if (sl[i].id === id)
+                return sl[i];
+        return null;
+    }
+
+    function builtinName(row) {
+        var e = builtinEntry(row.id);
+        return e ? e.name : row.name;
+    }
+
+    function builtinGlyph(row) {
+        var e = builtinEntry(row.id);
+        return (e && e.glyph.length) ? e.glyph : row.glyph;
+    }
 
     function openForm() {
         root.formName = "";
@@ -51,6 +95,8 @@ PillSurface {
         root.formKey = "";
         root.conflict = "";
         root.listening = false;
+        root.rebindId = "";
+        root.conflictId = "";
         root.formOpen = true;
     }
 
@@ -60,15 +106,57 @@ PillSurface {
         root.conflict = "";
     }
 
+    /** Glyph a custom space row shows: its saved pick, else the fallback for unpicked spaces. */
+    function glyphFor(entry) {
+        return entry.glyph && entry.glyph.length ? entry.glyph : "sparkles";
+    }
+
+    function openEdit(id, name, glyph) {
+        root.rebindId = "";
+        root.conflictId = "";
+        root.listening = false;
+        root.editId = id;
+        root.editName = name;
+        root.editGlyph = glyph;
+    }
+
+    function closeEdit() {
+        root.editId = "";
+    }
+
+    /** Persist the inline edit: display name plus picked glyph; id, key and apps stay. */
+    function saveEdit() {
+        var name = root.editName.trim();
+        if (name.length > 0)
+            Spaces.updateSpace(root.editId, name, root.editGlyph);
+        root.closeEdit();
+    }
+
     /**
-     * Fold a captured keypress into a single uppercase letter for the new space's
-     * key. Modifiers are dropped (Super is auto-prefixed), a bare modifier keeps
-     * capture waiting, Escape ends it, and anything that is not one A–Z letter is
-     * refused inline.
+     * Start an inline key capture on a custom space's key chip. The keyCatcher
+     * swallows keystrokes while `listening` and feeds capture(); the chip shows
+     * the capture state and the row carries the hint or conflict underneath.
+     */
+    function rebind(id) {
+        root.closeEdit();
+        root.conflict = "";
+        root.conflictId = "";
+        root.rebindId = id;
+        root.listening = true;
+        keyCatcher.forceActiveFocus();
+    }
+
+    /**
+     * Fold a captured keypress into a single uppercase letter. Modifiers are
+     * dropped (Super is auto-prefixed), a bare modifier keeps capture waiting,
+     * Escape ends it, and anything that is not one A–Z letter is refused inline.
+     * With a rebind armed the letter goes to that row's key after a clash check
+     * against every other space and bind; without one it seeds the create form.
      */
     function capture(key, modifiers) {
         if (key === Qt.Key_Escape) {
             root.listening = false;
+            root.rebindId = "";
             return;
         }
         var name = Chord.chord(key, 0);
@@ -76,7 +164,22 @@ PillSurface {
             return;
         if (!/^[A-Z]$/.test(name)) {
             root.conflict = "single letter only";
+            root.conflictId = root.rebindId;
             root.listening = false;
+            root.rebindId = "";
+            return;
+        }
+        if (root.rebindId.length > 0) {
+            if (Spaces.keyTaken(name, root.rebindId)) {
+                root.conflict = "Super + " + name + " in use";
+                root.conflictId = root.rebindId;
+            } else {
+                root.conflict = "";
+                root.conflictId = "";
+                Spaces.updateKey(root.rebindId, name);
+            }
+            root.listening = false;
+            root.rebindId = "";
             return;
         }
         root.formKey = name;
@@ -107,9 +210,84 @@ PillSurface {
         formOpen = false;
         listening = false;
         conflict = "";
+        editId = "";
+        rebindId = "";
+        conflictId = "";
     }
 
     onFormOpenChanged: if (formOpen) Qt.callLater(nameField.forceActiveFocus)
+
+    /**
+     * Inline rename + glyph editor shared by every space row, built-in and
+     * custom. The host delegate shows it while its row is in edit mode and
+     * focuses `field`; it reads and writes root.editName / root.editGlyph
+     * directly. Enter saves, Escape cancels; a glyph tap re-picks.
+     */
+    component EditBlock: Column {
+        id: editBlock
+
+        property alias field: nameEdit
+
+        spacing: 6 * root.s
+
+        TextField {
+            id: nameEdit
+            width: parent.width
+            background: null
+            padding: 0
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 12.5 * root.s
+            font.weight: Font.DemiBold
+            selectByMouse: true
+            selectionColor: Theme.verm
+            text: root.editName
+            onTextEdited: root.editName = text
+            Keys.onPressed: (e) => {
+                if (e.key === Qt.Key_Escape) { root.closeEdit(); e.accepted = true; }
+                else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { root.saveEdit(); e.accepted = true; }
+            }
+        }
+
+        Row {
+            spacing: 4 * root.s
+
+            Repeater {
+                model: root.glyphChoices
+
+                delegate: Rectangle {
+                    id: gchip
+                    required property string modelData
+                    readonly property bool on: root.editGlyph === modelData
+
+                    width: 22 * root.s
+                    height: 22 * root.s
+                    radius: 6 * root.s
+                    color: gchip.on ? Qt.alpha(Theme.vermLit, 0.12) : (gArea.containsMouse ? Theme.frameBg : "transparent")
+                    border.width: 1
+                    border.color: gchip.on ? Qt.alpha(Theme.vermLit, 0.55) : "transparent"
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
+
+                    GlyphIcon {
+                        anchors.centerIn: parent
+                        width: 13 * root.s
+                        height: 13 * root.s
+                        name: gchip.modelData
+                        color: gchip.on ? Theme.vermLit : Theme.iconDim
+                        stroke: 1.8
+                    }
+
+                    MouseArea {
+                        id: gArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.editGlyph = gchip.modelData
+                    }
+                }
+            }
+        }
+    }
 
     Item {
         id: keyCatcher
@@ -189,47 +367,94 @@ PillSurface {
                     required property var modelData
 
                     readonly property bool nav: modelData.surface.length > 0
+                    readonly property bool editing: root.editId === wrow.modelData.id
 
                     width: parent.width
-                    height: 50 * root.s
+                    height: editing ? 80 * root.s : 50 * root.s
+
+                    onEditingChanged: if (editing) Qt.callLater(wEditBlock.field.forceActiveFocus)
 
                     Rectangle {
                         anchors.fill: parent
                         anchors.topMargin: 3 * root.s
                         anchors.bottomMargin: 3 * root.s
                         radius: 10 * root.s
-                        color: (wrow.nav && navHover.hovered) ? Theme.frameBg : "transparent"
+                        color: (wrow.editing || (wrow.nav && navHover.hovered)) ? Theme.frameBg : "transparent"
                         border.width: 1
-                        border.color: (wrow.nav && navHover.hovered) ? Theme.frameBorder : "transparent"
+                        border.color: (wrow.editing || (wrow.nav && navHover.hovered)) ? Theme.frameBorder : "transparent"
                         Behavior on color { ColorAnimation { duration: Motion.fast } }
                     }
 
                     HoverHandler { id: navHover; enabled: wrow.nav }
 
-                    Column {
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: wrow.nav
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (!wrow.editing) root.requestSurface(wrow.modelData.surface)
+                    }
+
+                    GlyphIcon {
+                        id: wGlyph
                         anchors.left: parent.left
                         anchors.leftMargin: 12 * root.s
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !wrow.editing
+                        width: 16 * root.s
+                        height: 16 * root.s
+                        name: root.builtinGlyph(wrow.modelData)
+                        color: Theme.iconDim
+                        stroke: 1.8
+                    }
+
+                    Column {
+                        anchors.left: wGlyph.right
+                        anchors.leftMargin: 10 * root.s
                         anchors.right: rightRow.left
                         anchors.rightMargin: 10 * root.s
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 3 * root.s
+                        spacing: 6 * root.s
 
-                        Text {
+                        Column {
                             width: parent.width
-                            text: wrow.modelData.name
-                            color: Theme.cream
-                            font.family: Theme.font
-                            font.pixelSize: 12.5 * root.s
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
+                            spacing: 3 * root.s
+
+                            Text {
+                                id: wNameText
+                                width: parent.width
+                                visible: !wrow.editing
+                                text: root.builtinName(wrow.modelData)
+                                color: Theme.cream
+                                font.family: Theme.font
+                                font.pixelSize: 12.5 * root.s
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+
+                                /** Only the name itself opens rename; the rest of the row keeps its tap target. */
+                                MouseArea {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: Math.min(wNameText.implicitWidth, wNameText.width)
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.openEdit(wrow.modelData.id, root.builtinName(wrow.modelData), root.builtinGlyph(wrow.modelData))
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                visible: !wrow.editing
+                                text: wrow.modelData.note
+                                color: Theme.faint
+                                font.family: Theme.font
+                                font.pixelSize: 10.5 * root.s
+                                elide: Text.ElideRight
+                            }
                         }
-                        Text {
+
+                        EditBlock {
+                            id: wEditBlock
                             width: parent.width
-                            text: wrow.modelData.note
-                            color: Theme.faint
-                            font.family: Theme.font
-                            font.pixelSize: 10.5 * root.s
-                            elide: Text.ElideRight
+                            visible: wrow.editing
                         }
                     }
 
@@ -240,8 +465,10 @@ PillSurface {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 8 * root.s
 
+                        /** Built-in keys live in binds.lua (the Keybinds surface owns them); this chip is display-only. */
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
+                            visible: !wrow.editing
                             width: keyText.implicitWidth + 16 * root.s
                             height: keyText.implicitHeight + 8 * root.s
                             radius: 7 * root.s
@@ -263,20 +490,41 @@ PillSurface {
 
                         GlyphIcon {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: wrow.nav
+                            visible: wrow.nav && !wrow.editing
                             width: 16 * root.s
                             height: 16 * root.s
                             name: "chevron-right"
                             color: navHover.hovered ? Theme.cream : Theme.iconDim
                             stroke: 2.2
                         }
-                    }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: wrow.nav
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.requestSurface(wrow.modelData.surface)
+                        /** Save chip for the inline edit; swaps in for the key chip and chevron. */
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: wrow.editing
+                            width: 24 * root.s
+                            height: 24 * root.s
+                            radius: 7 * root.s
+                            color: wSaveArea.containsMouse ? Qt.alpha(Theme.vermLit, 0.16) : "transparent"
+                            Behavior on color { ColorAnimation { duration: Motion.fast } }
+
+                            GlyphIcon {
+                                anchors.centerIn: parent
+                                width: 13 * root.s
+                                height: 13 * root.s
+                                name: "check"
+                                color: wSaveArea.containsMouse ? Theme.vermLit : Theme.iconDim
+                                stroke: 2
+                            }
+
+                            MouseArea {
+                                id: wSaveArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.saveEdit()
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -290,26 +538,31 @@ PillSurface {
             }
 
             Repeater {
-                model: Spaces.list
+                model: root.customSpaces
 
                 delegate: Item {
                     id: crow
                     required property int index
                     required property var modelData
 
-                    readonly property bool last: crow.index === Spaces.list.length - 1
+                    readonly property bool last: crow.index === root.customSpaces.length - 1
+                    readonly property bool editing: root.editId === crow.modelData.id
+                    readonly property bool rebinding: root.rebindId === crow.modelData.id
+                    readonly property bool keyHint: crow.rebinding || root.conflictId === crow.modelData.id
 
                     width: parent.width
-                    height: 50 * root.s
+                    height: editing ? 80 * root.s : (keyHint ? 66 * root.s : 50 * root.s)
+
+                    onEditingChanged: if (editing) Qt.callLater(cEditBlock.field.forceActiveFocus)
 
                     Rectangle {
                         anchors.fill: parent
                         anchors.topMargin: 3 * root.s
                         anchors.bottomMargin: 3 * root.s
                         radius: 10 * root.s
-                        color: cHover.hovered ? Theme.frameBg : "transparent"
+                        color: (cHover.hovered || crow.editing) ? Theme.frameBg : "transparent"
                         border.width: 1
-                        border.color: cHover.hovered ? Theme.frameBorder : "transparent"
+                        border.color: (cHover.hovered || crow.editing) ? Theme.frameBorder : "transparent"
                         Behavior on color { ColorAnimation { duration: Motion.fast } }
                     }
 
@@ -319,36 +572,90 @@ PillSurface {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
+                            if (crow.editing)
+                                return;
+                            if (crow.rebinding) {
+                                root.rebindId = "";
+                                root.listening = false;
+                                return;
+                            }
+                            root.conflictId = "";
                             Spaces.editing = crow.modelData.id;
                             root.requestSurface("spaceapps");
                         }
                     }
 
-                    Column {
+                    GlyphIcon {
+                        id: cGlyph
                         anchors.left: parent.left
                         anchors.leftMargin: 12 * root.s
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !crow.editing
+                        width: 16 * root.s
+                        height: 16 * root.s
+                        name: root.glyphFor(crow.modelData)
+                        color: Theme.iconDim
+                        stroke: 1.8
+                    }
+
+                    Column {
+                        anchors.left: cGlyph.right
+                        anchors.leftMargin: 10 * root.s
                         anchors.right: cRightRow.left
                         anchors.rightMargin: 10 * root.s
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 3 * root.s
+                        spacing: 6 * root.s
 
-                        Text {
+                        Column {
                             width: parent.width
-                            text: crow.modelData.name
-                            color: Theme.cream
-                            font.family: Theme.font
-                            font.pixelSize: 12.5 * root.s
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
+                            spacing: 3 * root.s
+
+                            Text {
+                                id: cNameText
+                                width: parent.width
+                                visible: !crow.editing
+                                text: crow.modelData.name
+                                color: Theme.cream
+                                font.family: Theme.font
+                                font.pixelSize: 12.5 * root.s
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+
+                                /** Only the name itself opens rename; the rest of the row opens the app manager. */
+                                MouseArea {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: Math.min(cNameText.implicitWidth, cNameText.width)
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.openEdit(crow.modelData.id, crow.modelData.name, root.glyphFor(crow.modelData))
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                visible: !crow.editing && !crow.keyHint && crow.modelData.desc.length > 0
+                                text: crow.modelData.desc
+                                color: Theme.faint
+                                font.family: Theme.font
+                                font.pixelSize: 10.5 * root.s
+                                elide: Text.ElideRight
+                            }
+                            /** Live capture hint while the key chip listens; the clash message after. */
+                            Text {
+                                width: parent.width
+                                visible: crow.keyHint
+                                text: root.conflict.length > 0 ? root.conflict : "press a letter…  esc cancels"
+                                color: root.conflict.length > 0 ? Theme.vermLit : Theme.flameGlow
+                                font.family: Theme.font
+                                font.pixelSize: 10.5 * root.s
+                                elide: Text.ElideRight
+                            }
                         }
-                        Text {
+
+                        EditBlock {
+                            id: cEditBlock
                             width: parent.width
-                            visible: crow.modelData.desc.length > 0
-                            text: crow.modelData.desc
-                            color: Theme.faint
-                            font.family: Theme.font
-                            font.pixelSize: 10.5 * root.s
-                            elide: Text.ElideRight
+                            visible: crow.editing
                         }
                     }
 
@@ -362,6 +669,7 @@ PillSurface {
                         Rectangle {
                             id: cRemove
                             anchors.verticalCenter: parent.verticalCenter
+                            visible: !crow.editing
                             width: 24 * root.s
                             height: 24 * root.s
                             radius: 7 * root.s
@@ -389,29 +697,67 @@ PillSurface {
                             }
                         }
 
+                        /** Key chip: tapping starts an inline rebind capture for this space. */
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
+                            visible: !crow.editing
                             width: cKeyText.implicitWidth + 16 * root.s
                             height: cKeyText.implicitHeight + 8 * root.s
                             radius: 7 * root.s
-                            color: Theme.frameBg
+                            color: crow.rebinding ? Qt.alpha(Theme.vermLit, 0.12) : Theme.frameBg
                             border.width: 1
-                            border.color: Theme.hairSoft
+                            border.color: crow.rebinding ? Qt.alpha(Theme.vermLit, 0.55) : Theme.hairSoft
+                            Behavior on color { ColorAnimation { duration: Motion.fast } }
 
                             Text {
                                 id: cKeyText
                                 anchors.centerIn: parent
-                                text: "Super + " + crow.modelData.key
-                                color: Theme.subtle
+                                text: crow.rebinding ? "…" : "Super + " + crow.modelData.key
+                                color: crow.rebinding ? Theme.flameGlow : Theme.subtle
                                 font.family: Theme.font
                                 font.pixelSize: 11 * root.s
                                 font.weight: Font.Bold
                                 font.letterSpacing: 0.3 * root.s
                             }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.rebind(crow.modelData.id)
+                            }
+                        }
+
+                        /** Save chip for the inline edit; swaps in for the key chip and chevron. */
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: crow.editing
+                            width: 24 * root.s
+                            height: 24 * root.s
+                            radius: 7 * root.s
+                            color: cSaveArea.containsMouse ? Qt.alpha(Theme.vermLit, 0.16) : "transparent"
+                            Behavior on color { ColorAnimation { duration: Motion.fast } }
+
+                            GlyphIcon {
+                                anchors.centerIn: parent
+                                width: 13 * root.s
+                                height: 13 * root.s
+                                name: "check"
+                                color: cSaveArea.containsMouse ? Theme.vermLit : Theme.iconDim
+                                stroke: 2
+                            }
+
+                            MouseArea {
+                                id: cSaveArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.saveEdit()
+                            }
                         }
 
                         GlyphIcon {
                             anchors.verticalCenter: parent.verticalCenter
+                            visible: !crow.editing
                             width: 16 * root.s
                             height: 16 * root.s
                             name: "chevron-right"

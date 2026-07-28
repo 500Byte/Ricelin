@@ -1271,7 +1271,7 @@ PillSurface {
                             source: frame.modelData.thumb ? "file://" + frame.modelData.thumb : ""
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
-                            cache: true
+                            cache: false
                             smooth: true
                             sourceSize.width: 216 * root.s
                             sourceSize.height: 96 * root.s

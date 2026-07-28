@@ -30,6 +30,10 @@
       "note": "one arch name covers the whole family: on CachyOS pacman -S swww resolves to awww, which declares Provides: swww and Replaces: swww, while vanilla Arch installs native swww. The rice scripts call the awww binary, so a runtime symlink bridges awww->swww (or the reverse) after install; there is no swww crate on crates.io, so the cargo fallback builds from the LGFae/swww source",
       "repo": { "fedora": "copr:agonie/swww" }, "fallback": "cargo" },
 
+    { "id": "mpvpaper", "group": "core", "required": false, "desc": "Plays video files as animated wallpapers", "aur": true,
+      "names": { "arch": "mpvpaper", "debian": null, "fedora": "mpvpaper", "suse": "mpvpaper" },
+      "fallback": "github" },
+
     { "id": "hyprpicker", "group": "core", "required": true, "desc": "Picks a color from anywhere on screen", "aur": false,
       "names": { "arch": "hyprpicker", "debian": "hyprpicker", "fedora": "hyprpicker", "suse": "hyprpicker" },
       "repo": { "fedora": "copr:solopasha/hyprland" }, "fallback": null },

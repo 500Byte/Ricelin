@@ -284,6 +284,7 @@ PillSurface {
                         sourceSize.height: 128
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
+                        cache: false
                         smooth: true
                     }
                 }

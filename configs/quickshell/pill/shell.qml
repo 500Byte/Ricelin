@@ -288,7 +288,7 @@ ShellRoot {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: ((surfaceOpen || pill.quickChoosing) && !pill.authPending) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+            WlrLayershell.keyboardFocus: ((surfaceOpen || pill.quickChoosing) && !pill.authPending) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "pill"
 
             anchors { top: true; left: true; right: true; bottom: true }
@@ -343,7 +343,7 @@ ShellRoot {
                     if (pill.quickChoosing) {
                         ScreenRec.quickChoosing = false;
                         ScreenRec.quickScreenChoosing = false;
-                    } else if (!pill.linkBack() && !pill.keybindsBack()) {
+                    } else if (!pill.keybindsBack()) {
                         root.close();
                     }
                 }
