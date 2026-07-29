@@ -753,7 +753,7 @@ PillSurface {
             width: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotW, ao) * root.s
             height: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotH, ao) * root.s
             x: root.width / 2 + root.offsetX(off) - width / 2
-            y: ((root.height - height) / 2) + ((root.searching && root.searchMode === "wallhaven") ? 20 * root.s : 0)
+            y: ((root.height - height) / 2) + (root.searching ? 20 * root.s : 0)
             z: 10 - ao
             opacity: isLoadMore ? (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))) : (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao)))
 
