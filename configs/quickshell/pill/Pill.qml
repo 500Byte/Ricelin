@@ -2317,6 +2317,7 @@ Item {
         WheelScroller {
             flick: quickScreens
             s: pill.s
+            orientation: Qt.Horizontal
             anchors.fill: quickScreens
             visible: ScreenRec.quickScreenChoosing
         }

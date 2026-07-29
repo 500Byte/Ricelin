@@ -337,14 +337,28 @@ PillSurface {
                 }
             }
 
-            GlyphIcon {
+            Item {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                width: 16 * root.s
-                height: 16 * root.s
-                name: "chevron-left"
-                color: Theme.iconDim
-                stroke: 2.2
+                width: 24 * root.s
+                height: 24 * root.s
+
+                GlyphIcon {
+                    anchors.centerIn: parent
+                    width: 16 * root.s
+                    height: 16 * root.s
+                    name: "chevron-left"
+                    color: chevronArea.containsMouse ? Theme.cream : Theme.iconDim
+                    stroke: 2.2
+                }
+
+                MouseArea {
+                    id: chevronArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.requestClose()
+                }
             }
         }
 
