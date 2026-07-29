@@ -483,37 +483,7 @@ PillSurface {
                 opacity: 0
                 width: 1
                 height: 1
-                focus: root.searching && root.searchMode === "moewalls"
-                onFocusChanged: {
-                    if (focus && !(root.searching && root.searchMode === "moewalls")) {
-                        focus = false;
-                    }
-                }
-                onTextChanged: {
-                    root.query = text;
-                    root.currentPage = 1;
-                    root.loadingMore = false;
-                    debouncedSearch.restart();
-                }
-                Connections {
-                    target: root
-                    function onSearchingChanged() {
-                        if (root.searching && root.searchMode === "moewalls") {
-                            moeSearchInput.text = root.query;
-                            moeSearchInput.forceActiveFocus();
-                        } else {
-                            moeSearchInput.text = "";
-                        }
-                    }
-                    function onSearchModeChanged() {
-                        if (root.searching && root.searchMode === "moewalls") {
-                            moeSearchInput.text = root.query;
-                            moeSearchInput.forceActiveFocus();
-                        } else {
-                            moeSearchInput.text = "";
-                        }
-                    }
-                }
+                focus: false
             }
 
             MouseArea {
@@ -522,8 +492,84 @@ PillSurface {
                 onClicked: {
                     root.searchMode = "moewalls";
                     root.searching = true;
-                    root.triggerSearch();
-                    moeSearchInput.forceActiveFocus();
+                    // Switch tab without triggering search on empty text
+                    if (moeBarInput.text.trim().length > 0) {
+                        root.triggerSearch();
+                    } else {
+                        root.ddgResults = [];
+                    }
+                    moeBarInput.forceActiveFocus();
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: moeSearchBox
+        anchors.top: modeSelector.bottom
+        anchors.topMargin: 8 * root.s
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 180 * root.s
+        height: 22 * root.s
+        radius: 11 * root.s
+        color: Theme.tileBg
+        border.width: 1
+        border.color: moeBarInput.activeFocus ? Theme.cream : Theme.border
+        visible: root.searching && root.searchMode === "moewalls"
+        opacity: visible ? 1 : 0
+        z: 30
+        Behavior on opacity { NumberAnimation { duration: Motion.standard } }
+
+        TextInput {
+            id: moeBarInput
+            anchors.fill: parent
+            anchors.leftMargin: 12 * root.s
+            anchors.rightMargin: 12 * root.s
+            verticalAlignment: TextInput.AlignVCenter
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 10.5 * root.s
+            selectByMouse: true
+            clip: true
+
+            Text {
+                text: "Search MoeWalls..."
+                color: Theme.subtle
+                font.family: Theme.font
+                font.pixelSize: 10.5 * root.s
+                visible: !parent.text && !parent.activeFocus
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            onTextChanged: {
+                root.query = text;
+                root.currentPage = 1;
+                root.loadingMore = false;
+                if (text.trim().length > 0) {
+                    debouncedSearch.restart();
+                } else {
+                    debouncedSearch.stop();
+                    root.ddgResults = [];
+                }
+            }
+
+            Connections {
+                target: root
+                function onSearchingChanged() {
+                    if (root.searching && root.searchMode === "moewalls") {
+                        moeBarInput.text = root.query;
+                        moeBarInput.forceActiveFocus();
+                    } else {
+                        moeBarInput.text = "";
+                    }
+                }
+                function onSearchModeChanged() {
+                    if (root.searching && root.searchMode === "moewalls") {
+                        moeBarInput.text = root.query;
+                        moeBarInput.forceActiveFocus();
+                    } else {
+                        moeBarInput.text = "";
+                    }
                 }
             }
         }
