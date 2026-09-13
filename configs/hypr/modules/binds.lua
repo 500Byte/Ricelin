@@ -4,7 +4,7 @@ hl.bind(mod .. " + Q",         hl.dsp.window.close())
 hl.bind(mod .. " + T",         hl.dsp.exec_cmd("ghostty"))
 hl.bind(mod .. " + W",         hl.dsp.exec_cmd("firefox"))
 hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen())
-hl.bind(mod .. " + E",         hl.dsp.exec_cmd("dolphin"))
+hl.bind(mod .. " + E",         hl.dsp.exec_cmd("nautilus --new-window"))
 hl.bind(mod .. " + F",         hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mod .. " + ntilde", function()
     hl.dispatch(hl.dsp.window.float({ action = "enable" }))
@@ -64,13 +64,18 @@ end
 hl.bind(mod .. " + Plus",  function() zoomfunction(0.3) end,  { repeating = true })
 hl.bind(mod .. " + Minus", function() zoomfunction(-0.3) end, { repeating = true })
 
-hl.bind(mod .. " + Space",      hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/open-surface.sh launcher"))
-hl.bind(mod .. " + V",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/open-surface.sh clipboard"))
+local serp = os.getenv("HOME") .. "/.local/bin/serpantinum"
 
-hl.bind(mod .. " + L",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/lock.sh"))
+hl.bind(mod .. " + Space",      hl.dsp.exec_cmd(serp .. " msg toggle launcher"))
+hl.bind(mod .. " + V",          hl.dsp.exec_cmd(serp .. " msg toggle clipboard"))
 
-hl.bind(mod .. " + B",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/wallpaper.sh"))
-hl.bind(mod .. " + C",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/open-surface.sh wallpaper"))
+hl.bind(mod .. " + L",          hl.dsp.exec_cmd(serp .. " lock"))
+
+hl.bind(mod .. " + B",          hl.dsp.exec_cmd(serp .. " msg toggle system"))
+hl.bind(mod .. " + C",          hl.dsp.exec_cmd(serp .. " msg toggle wallpaper"))
+hl.bind(mod .. " + N",          hl.dsp.exec_cmd(serp .. " msg toggle network"))
+hl.bind(mod .. " + H",          hl.dsp.exec_cmd(serp .. " msg toggle guide"))
+hl.bind(mod .. " + U",          hl.dsp.exec_cmd(serp .. " msg toggle music"))
 hl.bind(mod .. " + D",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/record.sh"))
 hl.bind(mod .. " + G",          hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/open-surface.sh gameMode"))
 
@@ -79,6 +84,6 @@ hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),     { locked = true })
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("brightnessctl set 5%+"), { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"), { locked = true, repeating = true })
-hl.bind("XF86AudioPlay",        hl.dsp.global("quickshell:mediaToggle"),                           { locked = true })
-hl.bind("XF86AudioNext",        hl.dsp.global("quickshell:mediaNext"),                             { locked = true })
-hl.bind("XF86AudioPrev",        hl.dsp.global("quickshell:mediaPrev"),                             { locked = true })
+hl.bind("XF86AudioPlay",        hl.dsp.exec_cmd("playerctl play-pause"),                           { locked = true })
+hl.bind("XF86AudioNext",        hl.dsp.exec_cmd("playerctl next"),                                 { locked = true })
+hl.bind("XF86AudioPrev",        hl.dsp.exec_cmd("playerctl previous"),                             { locked = true })
