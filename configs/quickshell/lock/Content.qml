@@ -315,6 +315,8 @@ Item {
             clip: true
             focus: true
             enabled: !content.authenticating
+            selectByMouse: false
+            cursorVisible: content.reveal
             onTextChanged: {
                 if (text.length > 0)
                     content.showError = false;
@@ -424,5 +426,22 @@ Item {
                 onClicked: content.reveal = !content.reveal
             }
         }
+    }
+
+    Text {
+        id: capsLock
+        anchors.top: capsule.bottom
+        anchors.topMargin: 8 * content.s
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: input.text.length > 0
+                 && input.text === input.text.toUpperCase()
+                 && input.text !== input.text.toLowerCase()
+        text: "⬆ CAPS LOCK"
+        color: Theme.error
+        opacity: 0.7
+        font.family: Theme.font
+        font.pixelSize: 9 * content.s
+        font.weight: Font.Bold
+        font.letterSpacing: 1.5 * content.s
     }
 }

@@ -460,6 +460,28 @@ def write_matugen_terminal_colors(pill, hue, sat, chromatic):
     (CACHE / "ghostty-colors").write_text("\n".join(lines) + "\n")
 
 
+FIREFOX_CUSTOM = (Path.home() /
+                  ".config/mozilla/firefox/io44grgs.default-release/chrome/parfait/custom.css")
+
+
+def write_firefox_accent(pill):
+    """
+    Push the wallpaper accent into Firefox/Parfait's custom.css so the theme
+    accent tracks the wallpaper (--pf-accent-color). Only that line is
+    managed; the rest of the file (blur veil, etc.) is left untouched.
+    """
+    css = FIREFOX_CUSTOM.read_text() if FIREFOX_CUSTOM.is_file() else ""
+    accent_line = f'  --pf-accent-color: {pill["surface_container_highest"]} !important;'
+    if re.search(r"--pf-accent-color\s*:", css):
+        css = re.sub(r"--pf-accent-color\s*:\s*[^;]+;", accent_line, css, count=1)
+    elif ":root {" in css:
+        css = css.replace(":root {", ":root {\n" + accent_line, 1)
+    else:
+        css += f"\n:root {{\n{accent_line}\n}}\n"
+    FIREFOX_CUSTOM.parent.mkdir(parents=True, exist_ok=True)
+    FIREFOX_CUSTOM.write_text(css)
+
+
 def main():
     source = resolve_source(sys.argv)
     if source is None:
@@ -471,6 +493,7 @@ def main():
 
     write_pill_and_kde(pill, light)
     write_matugen_terminal_colors(pill, hue, sat, chromatic)
+    write_firefox_accent(pill)
     notify_apps(light)
     return 0
 

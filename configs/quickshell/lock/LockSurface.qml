@@ -20,12 +20,22 @@ Item {
     property bool active: false
     property real maskP: 0
 
-    readonly property bool overlayReady: deskOverlay.status === Image.Ready
+    readonly property bool overlayReady: deskOverlay.status === Image.Ready || deskOverlay.status === Image.Error
     readonly property bool shouldOpen: active && overlayReady
     onShouldOpenChanged: if (shouldOpen)
         openAnim.restart()
     onActiveChanged: if (!active)
         closeAnim.restart()
+
+    Timer {
+        id: safetyOpenTimer
+        interval: 200
+        running: surface.active && surface.maskP < 1.0
+        onTriggered: {
+            if (surface.maskP === 0)
+                openAnim.restart()
+        }
+    }
 
     /**
      * The lock UI's primary screen is just the first one Quickshell reports, so
@@ -44,6 +54,11 @@ Item {
     readonly property size quarter: Qt.size(Math.max(2, Math.round(width / 4)), Math.max(2, Math.round(height / 4)))
     readonly property size eighth: Qt.size(Math.max(2, Math.round(width / 8)), Math.max(2, Math.round(height / 8)))
     readonly property vector2d eighthVec: Qt.vector2d(eighth.width, eighth.height)
+
+    readonly property string fallbackShot: {
+        var state = Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state");
+        return "file://" + state + "/ricelin-wallpaper-still.png";
+    }
 
     readonly property string shotSource: {
         if (surface.screenName.length === 0)
@@ -79,6 +94,10 @@ Item {
                 cache: false
                 asynchronous: true
                 visible: false
+                onStatusChanged: {
+                    if (status === Image.Error && source !== surface.fallbackShot && surface.fallbackShot.length > 0)
+                        source = surface.fallbackShot;
+                }
             }
 
             ShaderEffectSource {
@@ -282,10 +301,9 @@ Item {
     }
 
     /**
-     * The frozen desktop grab, sharp and opaque, punched with a pill-shaped hole.
-     * As the hole grows the lock wipes open; outside the hole you keep seeing your
-     * own desktop, never black. Loaded synchronously so it is ready the frame the
-     * lock mounts and the reveal never opens onto a blank.
+     * The frozen desktop grab, sampled by the transition shader. The shader applies
+     * an organic wipe from the pill outward: smooth edge with a subtle glow and a
+     * propagating ripple, replacing the old hard‑rect MultiEffect mask.
      */
     Image {
         id: deskOverlay
@@ -296,51 +314,55 @@ Item {
         cache: false
         asynchronous: false
         visible: false
-        layer.enabled: true
-    }
-
-    Item {
-        id: maskItem
-        anchors.fill: parent
-        visible: false
-        layer.enabled: true
-        layer.smooth: true
-
-        Rectangle {
-            color: "white"
-            antialiasing: true
-
-            readonly property real pillW: 160 * surface.s
-            readonly property real pillH: 38 * surface.s
-            readonly property real pillY: 8 * Flags.topGap * surface.s
-
-            width: pillW + (surface.width - pillW) * surface.maskP
-            height: pillH + (surface.height - pillH) * surface.maskP
-            x: (surface.width - width) / 2
-            y: pillY * (1 - surface.maskP)
-            /** Corner follows the current height so the hole stays a rounded stadium the whole way, then eases to square edges only as it fills the screen. */
-            radius: (height / 2) * (1 - surface.maskP)
+        onStatusChanged: {
+            if (status === Image.Error && source !== surface.fallbackShot && surface.fallbackShot.length > 0)
+                source = surface.fallbackShot;
         }
     }
 
-    MultiEffect {
+    ShaderEffectSource {
+        id: deskSrc
         anchors.fill: parent
-        source: deskOverlay
-        maskEnabled: true
-        maskInverted: true
-        maskSource: maskItem
-        maskThresholdMin: 0.5
-        maskSpreadAtMin: 1.0
+        sourceItem: deskOverlay
+        hideSource: true
+        live: true
+        visible: false
+    }
+
+    readonly property real pillW: 160 * s
+    readonly property real pillH: 38 * s
+    readonly property real pillY: 8 * Flags.topGap * s
+
+    ShaderEffect {
+        anchors.fill: parent
+        property var source: deskSrc
+        property real maskP: surface.maskP
+        property vector2d res: Qt.vector2d(width, height)
+        property vector2d pillCenter: Qt.vector2d(width / 2,
+            surface.pillY + surface.pillH / 2)
+        property real pillHW: surface.pillW / 2
+        property real pillHH: surface.pillH / 2
+        property real soften: 40.0
+        property real glow: 1.2
+        property real chromaStrength: 12.0
+        property real burstIntensity: 0.35
+        property vector3d accent: Qt.vector3d(Theme.verm.r, Theme.verm.g, Theme.verm.b)
+        property vector3d burstColor: Qt.vector3d(1.0, 0.97, 0.92)
+        blending: true
+        visible: deskOverlay.status === Image.Ready && surface.maskP < 1.0
+        fragmentShader: "shaders/transition.frag.qsb"
     }
 
     /**
-     * The open eases in and out so it grows on smoothly instead of popping, the
-     * close keeps the liquid pillMorph curve that already feels right.
+     * ola expansiva: on unlock a glowing wave ring expands from the pill,
+     * revealing the desktop behind it.
+     * maskP=0 = full blur  |  maskP=1 = wave passed, all sharp
      */
     NumberAnimation {
         id: openAnim
         target: surface
         property: "maskP"
+        from: 0
         to: 1
         duration: 620
         easing.type: Easing.InOutCubic
@@ -350,9 +372,10 @@ Item {
         id: closeAnim
         target: surface
         property: "maskP"
-        to: 0
-        duration: 620
+        from: 0
+        to: 1
+        duration: 460
         easing.type: Easing.BezierSpline
-        easing.bezierCurve: [0.16, 1, 0.3, 1, 1, 1]
+        easing.bezierCurve: [0.3, 1, 0.5, 1, 1, 1]
     }
 }

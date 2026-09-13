@@ -17,8 +17,11 @@ hl.env("QT_QPA_PLATFORMTHEME", "kde")
 -- Force GTK4 to use the ngl renderer to prevent blank/black windows on Hyprland
 hl.env("GSK_RENDERER", "ngl")
 
--- Fix dead keys (tildes/accents) in GTK4/Ghostty on Wayland
-hl.env("GTK_IM_MODULE", "simple")
+-- Input method: fcitx5 (dead keys/accents work in GTK3, GTK4 and Qt apps on Wayland)
+hl.env("GTK_IM_MODULE", "fcitx")
+hl.env("QT_IM_MODULE", "fcitx")
+hl.env("XMODIFIERS", "@im=fcitx")
+hl.env("INPUT_METHOD", "fcitx")
 
 -- Allow KDE applications like Dolphin to locate application menus on Hyprland
 hl.env("XDG_MENU_PREFIX", "plasma-")

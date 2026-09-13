@@ -19,18 +19,16 @@ ShellRoot {
         user: root.currentUser
         onSucceeded: {
             root.revealed = false;
-            collapse.restart();
+            Cava.enabled = false;
+            Pw.text = "";
+            unlockTimer.restart();
         }
     }
 
     Timer {
-        id: collapse
-        interval: 640
-        onTriggered: {
-            sessionLock.locked = false;
-            Cava.enabled = false;
-            Pw.text = "";
-        }
+        id: unlockTimer
+        interval: 460
+        onTriggered: sessionLock.locked = false;
     }
 
     /** Fires as soon as the event loop frees after the lock surfaces are built, which is the earliest the grow can start without the fresh output dropping its first frames. */
@@ -41,6 +39,7 @@ ShellRoot {
     }
 
     function doLock(): void {
+        unlockTimer.stop();
         Pw.text = "";
         root.revealed = false;
         sessionLock.locked = true;

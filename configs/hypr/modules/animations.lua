@@ -9,7 +9,7 @@ hl.config({
     at speed 4.2 (420ms), so windows, layers and workspaces speak the same motion
     language as the shell instead of a faster quint pop.
 ]]
-hl.curve("pillMorph",      { type = "bezier", points = { { 0.16, 1.00 },    { 0.30, 1.00 } } })
+hl.curve("pillMorph",      { type = "bezier", points = { { 0.15, 0.00 },    { 0.10, 1.00 } } })
 hl.curve("quick",          { type = "bezier", points = { { 0.15, 0 },    { 0.1, 1 } } })
 hl.curve("almostLinear",   { type = "bezier", points = { { 0.5, 0.5 },   { 0.75, 1 } } })
 

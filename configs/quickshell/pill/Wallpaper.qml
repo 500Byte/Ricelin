@@ -5,6 +5,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
+import QtMultimedia
 import "Singletons"
 
 /**
@@ -19,7 +20,8 @@ import "Singletons"
  * along the thumb's lower edge and drains on early release.
  *
  * Typing any printable character while the strip is open drops it into a
- * DuckDuckGo image search: a search field reveals at the top, the strip swaps
+ * remote image search (Wallhaven or MoeWalls, depending on searchMode):
+ * a search field reveals at the top, the strip swaps
  * its model from local files to remote results (debounced fetch through
  * wallpaper-search.sh), and selecting a result downloads it, applies it and
  * returns to the local strip. Escape, an emptied query or a finished pick all
@@ -46,6 +48,7 @@ PillSurface {
             totalPages = 0;
             totalResults = 0;
             loadingMore = false;
+            searchCache = ({});
         }
     }
     property string query: ""
@@ -59,10 +62,16 @@ PillSurface {
     property string filterCategories: "111"
     property string filterRatio: ""
 
+    property string moeResolution: "2560x1440"
+    property string moeOrder: "most_upvotes"
+
     property int currentPage: 1
     property int totalPages: 0
     property int totalResults: 0
     property bool loadingMore: false
+    property var searchCache: ({})
+    property bool searchErrorShown: false
+
 
     function filterSortLabel(s) {
         if (s === "relevance") return "Relevance";
@@ -149,15 +158,54 @@ PillSurface {
         debouncedSearch.restart();
     }
 
+    function moeOrderLabel(o) {
+        const labels = {
+            "most_upvotes": "Top Voted",
+            "most_views": "Most Views",
+            "newest": "Newest",
+            "random": "Random"
+        };
+        return labels[o] || o;
+    }
+
+    function cycleMoeOrder() {
+        const list = ["most_upvotes", "most_views", "newest", "random"];
+        var idx = list.indexOf(moeOrder);
+        moeOrder = list[(idx + 1) % list.length];
+        currentPage = 1;
+        loadingMore = false;
+        triggerSearch();
+    }
+
     Timer {
         id: debouncedSearch
-        interval: 350
+        interval: root.query.length < 3 ? 800 : 400
         repeat: false
         onTriggered: root.triggerSearch()
     }
 
     function triggerSearch() {
         if (!searching) return;
+
+        var sanitizedQuery = root.query.replace(/[;&|`$]/g, "");
+
+        var isFirstPage = root.currentPage === 1;
+        var cacheKey = root.searchMode + "|" + sanitizedQuery + "|" +
+                       root.currentPage + "|" +
+                       (root.searchMode === "moewalls"
+                           ? root.moeResolution + "|" + root.moeOrder
+                           : root.filterSort + "|" + root.filterRange + "|" +
+                             root.filterPurity + "|" + root.filterCategories + "|" +
+                             root.filterRatio);
+
+        if (isFirstPage && root.searchCache[cacheKey]) {
+            var cached = root.searchCache[cacheKey];
+            root.ddgResults = cached.results;
+            root.totalPages = cached.totalPages;
+            root.totalResults = cached.totalResults;
+            root.loadingMore = false;
+            return;
+        }
 
         if (activeSearchProcess) {
             var oldProc = activeSearchProcess;
@@ -166,29 +214,36 @@ PillSurface {
             Qt.callLater(() => oldProc.destroy());
         }
 
-        var isFirstPage = root.currentPage === 1;
-
         var cmdLine = root.searchMode === "moewalls"
-            ? ["bash", root.searchScript, "search_moewalls", root.query]
-            : ["bash", root.searchScript, "search", root.query, root.filterSort, root.filterRange, root.filterPurity, root.filterCategories, root.filterRatio, root.currentPage];
+            ? ["bash", root.searchScript, "search_moewalls", sanitizedQuery, root.moeResolution, root.moeOrder, root.currentPage]
+            : ["bash", root.searchScript, "search", sanitizedQuery, root.filterSort, root.filterRange, root.filterPurity, root.filterCategories, root.filterRatio, root.currentPage];
+
+        console.log("wallpaper cmd:", cmdLine.join(" "));
 
         var proc = processComponent.createObject(root, {
             command: cmdLine,
             callback: (text) => {
                 try {
-                    var items = JSON.parse(text);
+                    var parsed = JSON.parse(text);
+                    if (parsed.error) {
+                        console.error("wallpaper script error:", parsed.error);
+                        if (isFirstPage) {
+                            root.ddgResults = [];
+                            root.searchErrorShown = true;
+                        }
+                        root.loadingMore = false;
+                        return;
+                    }
                     if (root.searchMode === "moewalls") {
-                        // Moewalls returns a flat array of video entries
                         root.totalPages = 1;
-                        root.totalResults = items.length;
-                        root.ddgResults = items;
+                        root.totalResults = parsed.length;
+                        root.ddgResults = parsed;
                         root.focusIndex = 0;
                         root.pos = 0;
                     } else {
-                        var result = items;
-                        var resultItems = result.items || [];
-                        root.totalPages = result.totalPages || 0;
-                        root.totalResults = result.total || 0;
+                        var resultItems = parsed.items || [];
+                        root.totalPages = parsed.totalPages || 0;
+                        root.totalResults = parsed.total || 0;
                         if (isFirstPage) {
                             root.ddgResults = resultItems;
                             root.focusIndex = 0;
@@ -197,9 +252,18 @@ PillSurface {
                             root.ddgResults = root.ddgResults.concat(resultItems);
                         }
                     }
+                    if (isFirstPage) {
+                        root.searchCache[cacheKey] = {
+                            results: root.ddgResults.slice(),
+                            totalPages: root.totalPages,
+                            totalResults: root.totalResults
+                        };
+                    }
                 } catch (e) {
+                    console.error("Search parse error:", e, "Response:", text);
                     if (isFirstPage) {
                         root.ddgResults = [];
+                        root.searchErrorShown = true;
                     }
                 }
                 root.loadingMore = false;
@@ -268,6 +332,13 @@ PillSurface {
     property real pos: 0
 
     clip: true
+    focus: true
+
+    Keys.enabled: root.active
+    Keys.onLeftPressed: (event) => { root.move(-1); event.accepted = true; }
+    Keys.onRightPressed: (event) => { root.move(1); event.accepted = true; }
+    Keys.onReturnPressed: (event) => { root.activate(); event.accepted = true; }
+    Keys.onEscapePressed: (event) => { root.exitSearch(); event.accepted = true; }
 
     readonly property var slotW:      [196, 126, 104, 88, 74]
     readonly property var slotH:      [110, 71, 59, 50, 42]
@@ -374,6 +445,12 @@ PillSurface {
                     if (procObj.callback) procObj.callback(this.text);
                 }
             }
+            onExited: function(exitCode) {
+                root.loadingMore = false;
+                if (root.activeSearchProcess === procObj) {
+                    root.activeSearchProcess = null;
+                }
+            }
         }
     }
 
@@ -478,100 +555,159 @@ PillSurface {
                 font.weight: (root.searching && root.searchMode === "moewalls") ? Font.Bold : Font.Normal
             }
 
-            TextInput {
-                id: moeSearchInput
-                opacity: 0
-                width: 1
-                height: 1
-                focus: false
-            }
-
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     root.searchMode = "moewalls";
+                    root.moeOrder = "newest";
                     root.searching = true;
-                    // Switch tab without triggering search on empty text
-                    if (moeBarInput.text.trim().length > 0) {
-                        root.triggerSearch();
-                    } else {
-                        root.ddgResults = [];
-                    }
-                    moeBarInput.forceActiveFocus();
                 }
             }
         }
     }
 
-    Rectangle {
-        id: moeSearchBox
+    Row {
+        id: moeBarRow
         anchors.top: modeSelector.bottom
         anchors.topMargin: 8 * root.s
         anchors.horizontalCenter: parent.horizontalCenter
-        width: 180 * root.s
-        height: 22 * root.s
-        radius: 11 * root.s
-        color: Theme.tileBg
-        border.width: 1
-        border.color: moeBarInput.activeFocus ? Theme.cream : Theme.border
+        spacing: 6 * root.s
         visible: root.searching && root.searchMode === "moewalls"
         opacity: visible ? 1 : 0
         z: 30
         Behavior on opacity { NumberAnimation { duration: Motion.standard } }
 
-        TextInput {
-            id: moeBarInput
-            anchors.fill: parent
-            anchors.leftMargin: 12 * root.s
-            anchors.rightMargin: 12 * root.s
-            verticalAlignment: TextInput.AlignVCenter
-            color: Theme.cream
-            font.family: Theme.font
-            font.pixelSize: 10.5 * root.s
-            selectByMouse: true
-            clip: true
+        Rectangle {
+            id: moeSearchBox
+            width: 180 * root.s
+            height: 22 * root.s
+            radius: 11 * root.s
+            color: Theme.tileBg
+            border.width: 1
+            border.color: moeBarInput.activeFocus ? Theme.cream : Theme.border
 
-            Text {
-                text: "Search MoeWalls..."
-                color: Theme.subtle
+            TextInput {
+                id: moeBarInput
+                anchors.fill: parent
+                anchors.leftMargin: 12 * root.s
+                anchors.rightMargin: 12 * root.s
+                verticalAlignment: TextInput.AlignVCenter
+                color: Theme.cream
                 font.family: Theme.font
                 font.pixelSize: 10.5 * root.s
-                visible: !parent.text && !parent.activeFocus
-                anchors.verticalCenter: parent.verticalCenter
-            }
+                selectByMouse: true
+                clip: true
 
-            onTextChanged: {
-                root.query = text;
-                root.currentPage = 1;
-                root.loadingMore = false;
-                if (text.trim().length > 0) {
-                    debouncedSearch.restart();
-                } else {
-                    debouncedSearch.stop();
-                    root.ddgResults = [];
+                Text {
+                    text: "Search MoeWalls..."
+                    color: Theme.subtle
+                    font.family: Theme.font
+                    font.pixelSize: 10.5 * root.s
+                    visible: !parent.text && !parent.activeFocus
+                    anchors.verticalCenter: parent.verticalCenter
                 }
-            }
 
-            Connections {
-                target: root
-                function onSearchingChanged() {
-                    if (root.searching && root.searchMode === "moewalls") {
-                        moeBarInput.text = root.query;
-                        moeBarInput.forceActiveFocus();
-                    } else {
-                        moeBarInput.text = "";
+                onTextChanged: {
+                    root.query = text;
+                    root.currentPage = 1;
+                    root.loadingMore = false;
+                    if (text.trim().length === 0) {
+                        root.ddgResults = [];
                     }
                 }
-                function onSearchModeChanged() {
-                    if (root.searching && root.searchMode === "moewalls") {
-                        moeBarInput.text = root.query;
-                        moeBarInput.forceActiveFocus();
-                    } else {
-                        moeBarInput.text = "";
+
+                onAccepted: root.triggerSearch()
+
+                Connections {
+                    target: root
+                    function onSearchingChanged() {
+                        if (root.searching) {
+                            moeBarInput.text = root.query;
+                            moeBarInput.forceActiveFocus();
+                        } else {
+                            moeBarInput.text = "";
+                        }
+                    }
+                    function onSearchModeChanged() {
+                        if (root.searching) {
+                            moeBarInput.text = root.query;
+                            moeBarInput.forceActiveFocus();
+                        } else {
+                            moeBarInput.text = "";
+                        }
                     }
                 }
             }
+        }
+
+        Rectangle {
+            id: moeSearchBtn
+            width: 50 * root.s
+            height: 22 * root.s
+            radius: 11 * root.s
+            color: moeBtnMouse.containsMouse ? Theme.tileBg : Theme.frameBg
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                anchors.centerIn: parent
+                text: "Search"
+                color: Theme.cream
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                id: moeBtnMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.triggerSearch()
+            }
+        }
+
+        Rectangle {
+            id: moeOrderChip
+            width: moeOrderText.implicitWidth + 16 * root.s
+            height: 22 * root.s
+            radius: 11 * root.s
+            color: moeOrderMouse.containsMouse ? Theme.frameBg : "transparent"
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: moeOrderText
+                anchors.centerIn: parent
+                text: root.moeOrderLabel(root.moeOrder)
+                color: Theme.cream
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                id: moeOrderMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.cycleMoeOrder()
+            }
+        }
+    }
+
+    // Progress bar for search loading
+    Rectangle {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        height: 2 * root.s
+        color: Theme.cream
+        visible: root.loadingMore
+
+        SequentialAnimation on width {
+            running: root.loadingMore
+            loops: Animation.Infinite
+            NumberAnimation { to: parent.width * 0.7; duration: 1000 }
+            NumberAnimation { to: parent.width * 0.3; duration: 1000 }
         }
     }
 
@@ -753,7 +889,7 @@ PillSurface {
             width: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotW, ao) * root.s
             height: isLoadMore ? (60 * root.s) : root.slotLerp(root.slotH, ao) * root.s
             x: root.width / 2 + root.offsetX(off) - width / 2
-            y: ((root.height - height) / 2) + (root.searching ? 20 * root.s : 0)
+            y: ((root.height - height) / 2) + (root.searching ? 32 * root.s : 0)
             z: 10 - ao
             opacity: isLoadMore ? (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))) : (edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao)))
 
@@ -771,6 +907,8 @@ PillSurface {
             readonly property string thumb: modelData.thumb !== undefined ? modelData.thumb : ""
             readonly property bool remote: modelData.image !== undefined
             readonly property string thumbSource: remote ? thumb : ("file://" + thumb)
+            readonly property bool isVideo: modelData.preview !== undefined
+            readonly property string videoSource: isVideo ? modelData.preview : ""
 
             readonly property real edgeFade: {
                 var soft = 70 * root.s;
@@ -792,17 +930,25 @@ PillSurface {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "+"
+                    text: root.loadingMore ? "..." : "+"
                     color: loadMoreMouse.containsMouse ? Theme.ghost : Theme.cream
                     font.family: Theme.font
                     font.pixelSize: 22 * root.s
                     font.weight: Font.Light
+
+                    SequentialAnimation on opacity {
+                        running: root.loadingMore
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.3; duration: 600 }
+                        NumberAnimation { to: 1.0; duration: 600 }
+                    }
                 }
                 MouseArea {
                     id: loadMoreMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: root.loadingMore ? Qt.WaitCursor : Qt.PointingHandCursor
+                    enabled: !root.loadingMore
                     onClicked: root.loadMore()
                 }
             }
@@ -815,7 +961,7 @@ PillSurface {
                 color: Theme.tileBg
                 visible: !tile.isLoadMore
 
-                layer.enabled: true
+                layer.enabled: tile.ao <= 1.5
                 layer.effect: MultiEffect {
                     saturation: tile.sat - 1
                     shadowEnabled: tile.focused
@@ -833,12 +979,24 @@ PillSurface {
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     smooth: true
+                    cache: true
+                }
+
+                Video {
+                    id: videoThumb
+                    anchors.fill: parent
+                    source: tile.isVideo && tile.focused ? tile.videoSource : ""
+                    visible: tile.isVideo && tile.focused
+                    fillMode: Video.PreserveAspectCrop
+                    muted: true
+                    loops: MediaPlayer.Infinite
+                    autoPlay: tile.focused
                 }
 
                 Rectangle {
                     anchors.fill: parent
                     color: Theme.tileBg
-                    visible: thumbImage.status === Image.Error
+                    visible: thumbImage.status === Image.Error && !tile.isVideo
                 }
 
                 Rectangle {
@@ -882,6 +1040,26 @@ PillSurface {
                     color: Theme.cream
                     font.family: Theme.font
                     font.pixelSize: 11 * root.s
+                }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 4 * root.s
+                    width: votesText.implicitWidth + 8 * root.s
+                    height: votesText.implicitHeight + 4 * root.s
+                    radius: 4 * root.s
+                    color: Qt.rgba(0, 0, 0, 0.7)
+                    visible: tile.focused && tile.modelData.votes > 0
+
+                    Text {
+                        id: votesText
+                        anchors.centerIn: parent
+                        text: "★ " + tile.modelData.votes
+                        color: Theme.bright
+                        font.family: Theme.font
+                        font.pixelSize: 8 * root.s
+                    }
                 }
 
                 Rectangle {
@@ -952,6 +1130,8 @@ PillSurface {
         text: {
             if (!root.searching)
                 return "No wallpapers in ~/Pictures/Wallpapers";
+            if (root.searchErrorShown)
+                return "search error";
             return "no results";
         }
         color: Theme.faint

@@ -23,7 +23,7 @@ hl.config({
     general = {
         gaps_in     = 6,
         gaps_out    = 12,
-        border_size = 2,
+        border_size = 1,
         layout      = "dwindle",
         resize_on_border = true,
         ["col.active_border"]   = active,
@@ -33,7 +33,7 @@ hl.config({
         rounding         = 12,
         rounding_power   = 4,
         active_opacity   = 1.00,
-        inactive_opacity = 1.00,
+        inactive_opacity = 0.90,
         shadow = {
             enabled      = true,
             range        = 12,
